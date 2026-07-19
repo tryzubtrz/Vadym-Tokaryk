@@ -1,0 +1,26 @@
+name: TryzubSetup
+version: '2.0.0'
+main: ua.tryzub.setup.TryzubSetupPlugin
+api-version: '1.21'
+author: MineLegacy
+description: MineLegacy hub — лобі, меню, донати, арени
+commands:
+  menu:
+    description: Меню режимів
+    aliases: [servers, режими]
+  donate:
+    description: Донат-магазин
+    aliases: [donat, shop, store]
+  coins:
+    description: Донат-монети
+    aliases: [points, mlcoins]
+  tryzubsetup:
+    description: Перебудувати лобі/арени
+    usage: /tryzubsetup rebuild
+    permission: tryzub.setup
+permissions:
+  tryzub.setup:
+    default: op
+  tryzub.coins:
+    description: Видавати донат-монети
+    default: op

@@ -1,0 +1,8 @@
+name: owner
+permissions:
+- '*'
+parents:
+- admin
+prefixes:
+- '&4&lВласник &f':
+    priority: 1000

@@ -1,0 +1,48 @@
+# MineLegacy — проксі (стиль play.mlegacy.net)
+config-version = "2.8"
+bind = "0.0.0.0:25565"
+motd = """
+<gray><strikethrough>]</strikethrough></gray><aqua><strikethrough>--</strikethrough></aqua> <yellow><bold>⚡</bold></yellow> <red><bold>Mine</bold></red><gold><bold>Legacy</bold></gold> <yellow><bold>⚡</bold></yellow> <green><bold>(1.8-1.21+)</bold></green> <aqua><strikethrough>--</strikethrough></aqua><gray><strikethrough>[</strikethrough></gray>
+<light_purple>❤</light_purple> <white>Виживання ▪ BedWars ▪ Skyblock ▪ Anarchy ▪ Prison ▪ Донат</white>"""
+show-max-players = 15000
+online-mode = false
+force-key-authentication = false
+player-info-forwarding-mode = "modern"
+forwarding-secret-file = "forwarding.secret"
+announce-forge = false
+kick-existing-players = false
+ping-passthrough = "DISABLED"
+enable-player-address-logging = true
+forced-hosts = {}
+
+[servers]
+lobby = "127.0.0.1:25566"
+minigames = "127.0.0.1:25567"
+survival = "127.0.0.1:25568"
+skyblock = "127.0.0.1:25569"
+prison = "127.0.0.1:25570"
+factions = "127.0.0.1:25571"
+anarchy = "127.0.0.1:25572"
+try = ["lobby"]
+
+[advanced]
+compression-threshold = 256
+compression-level = -1
+login-ratelimit = 3000
+connection-timeout = 5000
+read-timeout = 30000
+haproxy-protocol = false
+tcp-fast-open = false
+bungee-plugin-message-channel = true
+show-ping-requests = false
+failover-on-unexpected-server-disconnect = true
+announce-proxy-commands = true
+log-command-executions = false
+log-player-connections = true
+accepts-transfers = false
+
+[query]
+enabled = true
+port = 25565
+map = "MineLegacy"
+show-plugins = false

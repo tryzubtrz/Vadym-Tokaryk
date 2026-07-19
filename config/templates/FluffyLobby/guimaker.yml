@@ -1,0 +1,56 @@
+menus:
+  server_selector:
+    title: "<bold><gradient:#FFD700:#FF4500>⚡ MineLegacy — режими</gradient></bold>"
+    rows: 3
+    open_item:
+      material: PAPER
+      click_action: "RIGHT"
+    background_item:
+      material: BLACK_STAINED_GLASS_PANE
+    items:
+      - slot: 10
+        material: RED_BED
+        name: "<bold><red>BedWars / Міні-ігри</red></bold>"
+        lore: ["<gray>Класичні міні-ігри</gray>"]
+        action: connect
+        server: "minigames"
+      - slot: 11
+        material: GRASS_BLOCK
+        name: "<bold><green>Survival</green></bold>"
+        lore: ["<gray>Класичне виживання</gray>"]
+        action: connect
+        server: "survival"
+      - slot: 12
+        material: OAK_SAPLING
+        name: "<bold><aqua>Skyblock</aqua></bold>"
+        lore: ["<gray>Острів у небі</gray>"]
+        action: connect
+        server: "skyblock"
+      - slot: 13
+        material: NETHER_STAR
+        name: "<bold><yellow>Лобі</yellow></bold>"
+        action: connect
+        server: "lobby"
+      - slot: 14
+        material: IRON_PICKAXE
+        name: "<bold><gold>Prison</gold></bold>"
+        action: connect
+        server: "prison"
+      - slot: 15
+        material: DIAMOND_SWORD
+        name: "<bold><light_purple>Factions</light_purple></bold>"
+        action: connect
+        server: "factions"
+      - slot: 16
+        material: TNT
+        name: "<bold><dark_red>Anarchy</dark_red></bold>"
+        lore: ["<gray>Без правил</gray>"]
+        action: connect
+        server: "anarchy"
+      - slot: 22
+        material: EMERALD
+        name: "<bold><gold>Донат /donate</gold></bold>"
+        lore: ["<yellow>VIP · Premium · Legend · Sponsor</yellow>"]
+        action: command
+        commands: ["donate"]
+        run-as: PLAYER

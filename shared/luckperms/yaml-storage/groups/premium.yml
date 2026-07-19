@@ -1,0 +1,9 @@
+name: premium
+permissions:
+- essentials.fly
+- essentials.kits.vip
+parents:
+- vip
+prefixes:
+- '20':
+    priority: 0

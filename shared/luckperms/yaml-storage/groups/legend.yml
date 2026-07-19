@@ -1,0 +1,9 @@
+name: legend
+permissions:
+- essentials.fly
+- essentials.kits.vip
+parents:
+- premium
+prefixes:
+- '20':
+    priority: 0
