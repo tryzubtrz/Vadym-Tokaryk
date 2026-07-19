@@ -1,0 +1,103 @@
+# Permissions can not be changed for now [Will be added later in a update]
+#
+#buildsystem to use /build commands on themself and others:
+#permission: lobby.build
+#fluffylobby commands:
+#permission: lobby.manage
+#setspawn
+#permissions : lobby.setspawn
+#spawn
+#permissions - No Permission for this command
+
+
+settings:
+  NoBlockUpdate: true # Blocks all physics updates (e.g. Redstone, liquids, etc.)
+  GameRules:
+    DO_DAYLIGHT_CYCLE: false
+    DO_WEATHER_CYCLE: false
+    DO_MOB_SPAWNING: false
+    RANDOM_TICK_SPEED: 0
+    DO_ENTITY_DROPS: false
+    DO_TILE_DROPS: false
+
+disablechat: false
+#Disable the full chat on the server
+
+hunger:
+  override: true
+  level: 20
+  saturation: true
+
+health:
+  enabled: true         # Whether to apply health settings on join
+  hearts: 10            # Current visible health (HP)
+  max_hearts: 20        # Max health the player can have
+  effect: 'wither'      # Options: 'none', 'wither', 'poison'
+
+messages:
+  # To disable Join or Quit Message just write "-"
+  join_message: '<gray>»</gray> Вітаємо в <gradient:#0057B7:#FFD700>Тризуб</gradient>, <gradient:#8AF5C3:#32D7A1>%player%</gradient>!'
+  quit_message: '<gray>«</gray> <gradient:#F87171:#FB923C>%player%</gradient> вийшов.'
+
+  setspawn_message: '<gradient:#22C55E:#16A34A>Спавн встановлено.</gradient>'
+  spawn_message: '<gradient:#FACC15:#F59E0B>Телепортовано на спавн.</gradient>'
+  build_mode_enabled: '<gradient:#22C55E:#16A34A>Режим будівництва увімкнено.</gradient>'
+  build_mode_disabled: '<gradient:#EF4444:#F97316>Режим будівництва вимкнено.</gradient>'
+  only_players: '<gradient:#EF4444:#F97316>Лише для гравців.</gradient>'
+  reload_message: '<gradient:#22C55E:#06B6D4>Конфіг перезавантажено.</gradient>'
+  no_permission: '<gradient:#EF4444:#F43F5E>Немає дозволу.</gradient>'
+  usage_message: '<gray>Використання:</gray> <gradient:#32CD32:#7FFF00>%usage%</gradient>'
+
+  # Placeholder for the server click | <server>
+  connect_attempt: '<gray>Підключення до</gray> <gradient:#FCD34D:#F59E0B><server></gradient>...'
+  connect_error: '<gradient:#EF4444:#F59E0B>Не вдалося підключитись:</gradient> <white><server></white>'
+
+lobby_items:
+  bow:
+    name: '&dЛук-телепорт'
+    material: BOW
+    slot: 1
+  paper:
+    name: '&eВибір сервера'
+    material: PAPER
+    slot: 9
+  arrow:
+    name: '&2Стріла Ендера'
+    material: ARROW
+    slot: 10
+
+#--> You can just add more items
+#--> just do it like the configs shows
+#--->Save Name:
+#--->- name: 'Shown Name'
+#--->- material: 'Material'
+#--->- slot: 'Slot (0-9)'
+#
+#-> You get the EnderPearl back but it a bit bugged right now i work on a fix soon
+
+spawn:
+  world: 'world'
+  x: 0
+  y: 72
+  z: 0
+  yaw: 0.0
+  pitch: 0.0
+
+################ Extra ################
+
+lobbyhalo: true
+joinfirework: true
+
+require_command_permissions: false
+#- If enable every none lobby command get added a permission fluffylobby.<name of the command>
+#- Player's without this permissions can't use /plugins or other stuff anymore
+
+boostpads:
+  enabled: true
+  forward: 1.5
+  upward: 0.4
+
+tablist:
+  enabled: true
+  header: '\n <gradient:#0057B7:#FFD700><bold>Тризуб</bold></gradient> \n <gray>Привіт, %player%!</gray> \n'
+  footer: '\n <green>Онлайн: %online_playercount%</green> <gray>|</gray> <aqua>/server</aqua> \n'

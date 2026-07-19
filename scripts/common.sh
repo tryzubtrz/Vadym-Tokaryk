@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CACHE="$ROOT/.cache"
 UA="TryzubMinecraft/1.0 (github.com/tryzubtrz/vadym-tokaryk)"
-MC_VERSION="26.1.2"
+MC_VERSION="1.21.11"
 VELOCITY_VERSION="3.5.1"
 
 export ROOT CACHE UA MC_VERSION VELOCITY_VERSION

@@ -74,6 +74,9 @@ download "https://cdn.modrinth.com/data/IFN012qu/versions/aXqIRvSY/FluffyLobby-1
 download "https://cdn.spiget.org/file/spiget-resources/1223.jar" \
   "$PLUGINS_CACHE/Prison.jar"
 
+download "https://cdn.spiget.org/file/spiget-resources/34315.jar" \
+  "$PLUGINS_CACHE/Vault.jar"
+
 # ViaVersion на Velocity (підтримка різних клієнтів)
 cp "$PLUGINS_CACHE/ViaVersion.jar" "$ROOT/velocity/plugins/"
 cp "$PLUGINS_CACHE/LuckPerms-Velocity.jar" "$ROOT/velocity/plugins/"
@@ -90,6 +93,11 @@ cp "$PLUGINS_CACHE/ScreamingBedWars.jar" "$ROOT/servers/minigames/plugins/"
 cp "$PLUGINS_CACHE/IridiumSkyblock.jar" "$ROOT/servers/skyblock/plugins/"
 cp "$PLUGINS_CACHE/Prison.jar" "$ROOT/servers/prison/plugins/"
 cp "$PLUGINS_CACHE/ImprovedFactions.jar" "$ROOT/servers/factions/plugins/"
+
+cp "$PLUGINS_CACHE/Vault.jar" "$ROOT/servers/skyblock/plugins/"
+cp "$PLUGINS_CACHE/Vault.jar" "$ROOT/servers/prison/plugins/"
+cp "$PLUGINS_CACHE/Vault.jar" "$ROOT/servers/factions/plugins/"
+cp "$PLUGINS_CACHE/Vault.jar" "$ROOT/servers/minigames/plugins/"
 
 # Конфіги бекендів
 for s in "${SERVERS[@]}"; do
@@ -222,5 +230,12 @@ cat > "$ROOT/servers/lobby/UKRAINIAN.txt" <<'EOF'
 Використовуйте /server <назва> щоб перейти:
   lobby, minigames, survival, skyblock, prison, factions
 EOF
+
+
+# Українські тексти лобі (FluffyLobby)
+if [[ -d "$ROOT/config/templates/FluffyLobby" ]]; then
+  mkdir -p "$ROOT/servers/lobby/plugins/FluffyLobby"
+  cp "$ROOT/config/templates/FluffyLobby/"*.yml "$ROOT/servers/lobby/plugins/FluffyLobby/"
+fi
 
 log "Готово! Далі запустіть: ./scripts/start.sh"
