@@ -1,0 +1,117 @@
+# DeluxeMenus — plugins/DeluxeMenus/gui_menus/mode_selector.yml
+menu_title: '&8Выбор режима'
+open_command:
+  - modes
+  - menu
+size: 45
+items:
+  'survival':
+    material: GRASS_BLOCK
+    slot: 10
+    display_name: '&a&lВыживание'
+    lore:
+      - '&7Классика, приваты, работа, аукцион'
+      - ''
+      - '&7Онлайн: &f%funny_online_surv%'
+      - '&7Баланс: &e%coinsengine_balance_surv_coins%'
+      - ''
+      - '&a▶ Нажми, чтобы войти'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% surv'
+  'skyblock':
+    material: OAK_SAPLING
+    slot: 12
+    display_name: '&b&lSkyBlock'
+    lore:
+      - '&7Остров, генераторы, миссии'
+      - '&7Онлайн: &f%funny_online_sb%'
+      - '&a▶ Войти'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% sb'
+  'anarchy':
+    material: TNT
+    slot: 14
+    display_name: '&c&lАнархия'
+    lore:
+      - '&7ПВП без ограничений'
+      - '&7Онлайн: &f%funny_online_ana%'
+      - '&a▶ Войти'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% ana'
+  'bedwars':
+    material: RED_BED
+    slot: 16
+    display_name: '&c&lBedWars'
+    lore:
+      - '&7Команды, генераторы, кровати'
+      - '&7Онлайн: &f%funny_online_bw%'
+      - '&7Рейтинг: &e%funnystats_bw_rating%'
+      - '&a▶ В очередь'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% bw'
+  'skywars':
+    material: ENDER_EYE
+    slot: 28
+    display_name: '&e&lSkyWars'
+    lore:
+      - '&7Мин. игроков: &f8'
+      - '&7Онлайн: &f%funny_online_sw%'
+      - '&a▶ Войти'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% sw'
+  'skypvp':
+    material: DIAMOND_SWORD
+    slot: 30
+    display_name: '&b&lSkyPvP'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% spvp'
+  'hg':
+    material: BOW
+    slot: 32
+    display_name: '&6&lГолодные игры'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% hg'
+  'creative':
+    material: QUARTZ_BLOCK
+    slot: 34
+    display_name: '&f&lCreative'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% creative'
+  'prison':
+    material: IRON_PICKAXE
+    slot: 36
+    display_name: '&8&lPrison'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% prison'
+  'farm':
+    material: WHEAT
+    slot: 38
+    display_name: '&e&lFarm'
+    left_click_commands:
+      - '[close]'
+      - '[console] funny transfer %player_name% farm'
+  'profile':
+    material: PLAYER_HEAD
+    slot: 40
+    display_name: '&d&lПрофиль'
+    lore:
+      - '&7FunnyCoins: &e%coinsengine_balance_funny_coins%'
+      - '&7Ранг: %luckperms_prefix%'
+      - '&7Клан: &f%funny_clan%'
+    left_click_commands:
+      - '[openguimenu] profile'
+  'close':
+    material: BARRIER
+    slot: 44
+    display_name: '&cЗакрыть'
+    left_click_commands:
+      - '[close]'

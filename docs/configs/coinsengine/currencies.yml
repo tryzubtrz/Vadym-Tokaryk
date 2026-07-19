@@ -1,0 +1,56 @@
+# CoinsEngine — currencies skeleton
+# Path: plugins/CoinsEngine/currencies.yml (structure may vary by version — adapt keys)
+
+currencies:
+  funny_coins:
+    Alias: ['fc', 'funnycoins']
+    DisplayName: 'FunnyCoins'
+    Format: '&e⛁ %amount%'
+    Prefix: ''
+    Suffix: ' FC'
+    Decimal: false
+    Permission: ''
+    CommandAliases: ['coins', 'funnycoins']
+    Vault: false
+    Exchange:
+      Enabled: false
+    # FunnyCore handles cross-server sync via MySQL funny_coins table
+    Synchronization: true
+
+  surv_coins:
+    Alias: ['money', 'bal']
+    DisplayName: 'Монеты'
+    Format: '&6$%amount%'
+    Decimal: true
+    Vault: true
+    Synchronization: false
+    # Only load this currency definition on surv-* servers
+
+  sb_coins:
+    Alias: ['sbmoney']
+    DisplayName: 'SkyCoins'
+    Format: '&b❂ %amount%'
+    Decimal: true
+    Vault: true
+    Synchronization: false
+
+  ana_coins:
+    DisplayName: 'Anarchy$'
+    Format: '&c☠ %amount%'
+    Decimal: false
+    Vault: true
+    Synchronization: false
+
+  prison_tokens:
+    DisplayName: 'Tokens'
+    Format: '&7⬡ %amount%'
+    Decimal: false
+    Vault: false
+    Synchronization: false
+
+  farm_points:
+    DisplayName: 'FarmPoints'
+    Format: '&a☘ %amount%'
+    Decimal: false
+    Vault: false
+    Synchronization: false

@@ -1,0 +1,39 @@
+# Snippet — merge into paper-world-defaults.yml / purpur.yml per role
+# Lobby recommendation:
+
+verbose: false
+
+chunks:
+  auto-save-interval: 6000
+  max-auto-save-chunks-per-tick: 8
+  delay-chunk-unloads-by: 10s
+
+misc:
+  redstone-implementation: ALTERNATE_CURRENT
+
+entities:
+  spawning:
+    monster-spawn-max-per-chunk: 20
+    creature-spawn-max-per-chunk: 8
+    water-animal-spawn-max-per-chunk: 3
+  armor-stands:
+    tick: false
+    do-collision-entity-lookups: false
+
+hopper:
+  cooldown-when-full: true
+  disable-move-event: true
+
+tick-rates:
+  behavior:
+    villager:
+      validatenearbypoi: 60
+  sensor:
+    villager:
+      secondarypoisensor: 80
+
+# Per-server spigot.yml / server.properties:
+# view-distance=6
+# simulation-distance=4
+# network-compression-threshold=256
+# max-players=200 (surv) / 400 (lobby) / 16-32 (arena)

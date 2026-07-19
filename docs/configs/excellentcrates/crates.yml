@@ -1,0 +1,101 @@
+# ExcellentCrates — conceptual skeleton (adapt to plugin YAML schema)
+# Keys are GLOBAL (funny_global.crate_keys via FunnyCore bridge)
+
+crates:
+  common:
+    display-name: '&aОбычный кейс'
+    key: key_common
+    animation: csgo
+    permission: ''
+    rewards:
+      - id: fc_small
+        chance: 35.0
+        commands: ['funnycoins give %player% 25']
+        display: 'FunnyCoins x25'
+      - id: title_rookie
+        chance: 20.0
+        commands: ['funny title give %player% rookie']
+      - id: trail_smoke
+        chance: 15.0
+        commands: ['funny cosmetic give %player% trail_smoke']
+      - id: key_common_extra
+        chance: 10.0
+        commands: ['funny keys give %player% common 1']
+      - id: boost_job_30m
+        chance: 20.0
+        commands: ['funny boost give %player% jobs 30m']
+
+  rare:
+    display-name: '&9Редкий кейс'
+    key: key_rare
+    rewards:
+      - id: fc_med
+        chance: 30.0
+        commands: ['funnycoins give %player% 100']
+      - id: hat_fox
+        chance: 25.0
+        commands: ['funny cosmetic give %player% hat_fox']
+      - id: title_hunter
+        chance: 20.0
+        commands: ['funny title give %player% hunter']
+      - id: key_epic
+        chance: 5.0
+        commands: ['funny keys give %player% epic 1']
+      - id: trail_hearts
+        chance: 20.0
+        commands: ['funny cosmetic give %player% trail_hearts']
+
+  epic:
+    display-name: '&5Эпический кейс'
+    key: key_epic
+    pity:
+      enabled: true
+      soft: 50
+    rewards:
+      - id: fc_big
+        chance: 25.0
+        commands: ['funnycoins give %player% 300']
+      - id: kill_lightning
+        chance: 20.0
+        commands: ['funny cosmetic give %player% kill_lightning']
+      - id: join_epic
+        chance: 15.0
+        commands: ['funny cosmetic give %player% join_epic']
+      - id: key_legend
+        chance: 5.0
+        commands: ['funny keys give %player% legend 1']
+      - id: title_epic
+        chance: 35.0
+        commands: ['funny title give %player% epic_gladiator']
+
+  legendary:
+    display-name: '&6&lЛегендарный кейс'
+    key: key_legend
+    pity:
+      enabled: true
+      hard: 80
+      guarantee: legend_exclusive_aura
+    rewards:
+      - id: fc_huge
+        chance: 30.0
+        commands: ['funnycoins give %player% 750']
+      - id: aura_dragon
+        chance: 10.0
+        commands: ['funny cosmetic give %player% aura_dragon']
+      - id: title_legend
+        chance: 20.0
+        commands: ['funny title give %player% network_legend']
+      - id: duplicate_fc
+        chance: 40.0
+        commands: ['funnycoins give %player% 300']
+
+# SkyBlock-only crate bought with sb_coins (shop NPC), still rewards GLOBAL cosmetics/FC
+crates_sb:
+  sb_common:
+    buy-currency: sb_coins
+    buy-price: 50000
+    key: key_sb_common
+    rewards:
+      - sb_coins_burst: ['coinsengine give %player% sb_coins 15000']
+      - fc_drip: ['funnycoins give %player% 15']
+      - cosmetic: ['funny cosmetic give %player% trail_leaves']
