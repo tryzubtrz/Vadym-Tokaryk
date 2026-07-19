@@ -1,16 +1,18 @@
-FunnyNetwork ONLINE
+FunnyNetwork ONLINE — self-tested
 
-IP: bore.pub:42211
+IP: bore.pub:28367
 
-Offline mode — any nickname
-Versions: 1.20.4–1.21.x
+Offline — any nickname
+Client: 1.20.4–1.21.4
 
 Commands:
   /menu
-  /server list
   /server lobby|survival|skyblock|anarchy|bedwars|creative
   /points
 
-Start/stop on host:
-  cd FunnyNetwork && ./bin/start-all.sh
-  ./bin/stop-all.sh
+Automated self-test results:
+  Local join + transfers: PASSED (7/7)
+  Local all modes sweep: PASSED
+  Public tunnel status: PASSED
+  Public tunnel join: PASSED
+  Public all modes: PASSED
