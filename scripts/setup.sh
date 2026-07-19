@@ -165,7 +165,7 @@ _version: 31
 proxies:
   velocity:
     enabled: true
-    online-mode: true
+    online-mode: false
     secret: '$SECRET'
   bungee-cord:
     online-mode: true
