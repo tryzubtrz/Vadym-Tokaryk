@@ -1,0 +1,9 @@
+runtime/servers/
+runtime/proxy/
+runtime/logs/
+runtime/CONNECT_ADDR
+runtime/plugins-cache/
+runtime/secrets/
+!runtime/modes.list
+*.log
+bin/bore-tunnel

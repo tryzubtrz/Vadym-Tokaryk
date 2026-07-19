@@ -1,0 +1,64 @@
+# TAB plugin skeleton — header/footer + sorting
+# Adapt to TAB 5.x syntax
+
+header-footer:
+  enabled: true
+  header:
+    - '&b&lFunnyNetwork'
+    - '&7Онлайн: &f%velocity_total% &8| &7Сервер: &f%funny_server%'
+  footer:
+    - '&7FunnyCoins: &e%coinsengine_balance_funny_coins%'
+    - '&7play.funnynetwork.net'
+
+scoreboard:
+  enabled: true
+  toggle-command: /sb
+  boards:
+    lobby:
+      title: '&b&lFunnyNetwork'
+      lines:
+        - '&7'
+        - '&7Ранг: %luckperms_prefix%'
+        - '&7Титул: &f%funny_title%'
+        - '&7Клан: &f%funny_clan%'
+        - '&7'
+        - '&7FunnyCoins: &e%coinsengine_balance_funny_coins%'
+        - '&7Квесты: &a%funnyquests_daily_progress%'
+        - '&7'
+        - '&bplay.funnynetwork.net'
+    survival:
+      title: '&a&lВыживание'
+      lines:
+        - '&7Монеты: &e%coinsengine_balance_surv_coins%'
+        - '&7FunnyCoins: &e%coinsengine_balance_funny_coins%'
+        - '&7Онлайн мира: &f%server_online%'
+    bedwars_wait:
+      title: '&c&lBedWars'
+      lines:
+        - '&7Карта: &f%bw_map%'
+        - '&7Игроки: &f%bw_players%&7/&f%bw_max%'
+        - '&7Мин. старт: &e%bw_min%'
+        - '&7Статус: &f%bw_state%'
+
+bossbar:
+  enabled: true
+  bars:
+    event:
+      text: '&eВайп через &f%funny_wipe_days% &eдней'
+      color: YELLOW
+      style: PROGRESS
+
+sorting-types:
+  - GROUPS:owner,admin,mod,helper,legend,elite,premium,vip,default
+  - PLACEHOLDER_A_TO_Z:%player_name%
+
+groups:
+  owner: { tabprefix: '&4&lOWNER &f' }
+  admin: { tabprefix: '&4Admin &f' }
+  mod: { tabprefix: '&cMod &f' }
+  helper: { tabprefix: '&9Helper &f' }
+  legend: { tabprefix: '&6&lLEGEND &f' }
+  elite: { tabprefix: '&dElite &f' }
+  premium: { tabprefix: '&bPremium &f' }
+  vip: { tabprefix: '&aVIP &f' }
+  default: { tabprefix: '&7' }

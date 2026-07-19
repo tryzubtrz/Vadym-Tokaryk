@@ -1,0 +1,41 @@
+menu_title: '&8&lFunnyNetwork &8| Режимы'
+open_command:
+  - modes
+  - menu
+  - servers
+size: 27
+items:
+  survival:
+    material: GRASS_BLOCK
+    slot: 10
+    display_name: '&a&lВыживание'
+    lore: ['&7Классика + экономика','&e▶ /server survival']
+    left_click_commands: ['[close]','[player] server survival']
+  skyblock:
+    material: OAK_SAPLING
+    slot: 12
+    display_name: '&b&lSkyBlock'
+    lore: ['&7Остров','&e▶ /server skyblock']
+    left_click_commands: ['[close]','[player] server skyblock']
+  anarchy:
+    material: TNT
+    slot: 14
+    display_name: '&c&lАнархия'
+    lore: ['&7Без правил','&e▶ /server anarchy']
+    left_click_commands: ['[close]','[player] server anarchy']
+  bedwars:
+    material: RED_BED
+    slot: 16
+    display_name: '&c&lBedWars'
+    lore: ['&7Лобби мини-игры','&e▶ /server bedwars']
+    left_click_commands: ['[close]','[player] server bedwars']
+  creative:
+    material: QUARTZ_BLOCK
+    slot: 22
+    display_name: '&f&lCreative'
+    left_click_commands: ['[close]','[player] server creative']
+  hub:
+    material: NETHER_STAR
+    slot: 4
+    display_name: '&d&lЛобби'
+    left_click_commands: ['[close]','[player] server lobby']

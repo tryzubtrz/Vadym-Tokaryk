@@ -1,0 +1,70 @@
+# FunnyCore — central network plugin skeleton
+server-id: ${FUNNY_SERVER_ID}
+server-role: ${FUNNY_SERVER_ROLE}   # lobby|mode_lobby|game|arena
+mode: ${FUNNY_MODE}                # hub|surv|ana|sb|bw|sw|spvp|hg|creative|prison|farm
+
+language-default: ru
+
+mysql:
+  host: mariadb.internal
+  port: 3306
+  database: funny_global
+  user: funny_core
+  password: "CHANGE_ME"
+  pool-size: 8
+
+redis:
+  host: redis.internal
+  port: 6379
+  password: "CHANGE_ME"
+  channels:
+    transfer: funny:transfer
+    party: funny:party
+    clan: funny:clan
+    announce: funny:announce
+    stats: funny:stats
+    profile-invalidate: funny:profile:inv
+
+transfer:
+  groups:
+    hub: ['lobby-01', 'lobby-02', 'lobby-03']
+    surv: ['lb-surv']          # mode lobby first
+    surv-game: ['surv-01', 'surv-02', 'surv-03', 'surv-04']
+    ana: ['lb-ana']
+    sb: ['lb-sb']
+    bw: ['lb-bw']
+    sw: ['lb-sw']
+    spvp: ['lb-sp']
+    hg: ['lb-hg']
+    creative: ['creative-01']
+    prison: ['lb-prison']
+    farm: ['farm-01']
+  strategy: least-players
+  queue-enabled: true
+  limbo-server: limbo-01
+
+funny-coins:
+  table: funny_coins
+  ledger: true
+  pay-enabled: true
+  pay-min: 1
+  pay-max: 100000
+
+cosmetics:
+  apply-on-join: true
+  disabled-modes: []     # e.g. ['bw-arena'] disable trails in combat if needed
+
+quests:
+  daily-reset-timezone: Europe/Moscow
+  weekly-reset-day: MONDAY
+
+wipe:
+  next-date: '2026-10-01'
+  announce-bossbar: true
+
+tebex:
+  idempotency-table: tebex_transactions
+
+commands:
+  hub-aliases: ['hub', 'lobby', 'l']
+  coins-aliases: ['coins', 'fc', 'funnycoins']
