@@ -48,3 +48,5 @@ servers/*/version_history.json
 servers/*/IridiumSkyblock*/
 velocity/lang/
 velocity/plugins/
+shared/luckperms/yaml-storage/users/
+config/rcon.password

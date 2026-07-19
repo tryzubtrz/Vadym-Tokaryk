@@ -1,0 +1,14 @@
+name: TryzubSetup
+version: '1.0.0'
+main: ua.tryzub.setup.TryzubSetupPlugin
+api-version: '1.21'
+author: Tryzub
+description: Автоналаштування лобі та арен мережі Тризуб
+commands:
+  tryzubsetup:
+    description: Перебудувати лобі/арени
+    usage: /tryzubsetup rebuild
+    permission: tryzub.setup
+permissions:
+  tryzub.setup:
+    default: op

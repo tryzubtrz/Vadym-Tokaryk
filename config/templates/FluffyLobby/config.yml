@@ -32,7 +32,7 @@ health:
   enabled: true         # Whether to apply health settings on join
   hearts: 10            # Current visible health (HP)
   max_hearts: 20        # Max health the player can have
-  effect: 'wither'      # Options: 'none', 'wither', 'poison'
+  effect: 'none'      # Options: 'none', 'wither', 'poison'
 
 messages:
   # To disable Join or Quit Message just write "-"
@@ -56,15 +56,15 @@ lobby_items:
   bow:
     name: '&dЛук-телепорт'
     material: BOW
-    slot: 1
+    slot: 0
   paper:
     name: '&eВибір сервера'
     material: PAPER
-    slot: 9
+    slot: 4
   arrow:
     name: '&2Стріла Ендера'
     material: ARROW
-    slot: 10
+    slot: 8
 
 #--> You can just add more items
 #--> just do it like the configs shows
@@ -77,9 +77,9 @@ lobby_items:
 
 spawn:
   world: 'world'
-  x: 0
-  y: 72
-  z: 0
+  x: 0.5
+  y: 101
+  z: 0.5
   yaw: 0.0
   pitch: 0.0
 
