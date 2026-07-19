@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Статус мережі Тризуб
+# Статус мережі MineLegacy
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
@@ -14,7 +14,7 @@ check() {
   fi
 }
 
-echo "Статус мережі Тризуб:"
+echo "Статус мережі MineLegacy:"
 check velocity
 for s in "${SERVERS[@]}"; do
   check "$s"

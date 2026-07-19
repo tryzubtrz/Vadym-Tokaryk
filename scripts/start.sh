@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Запуск усієї мережі Тризуб
+# Запуск усієї мережі MineLegacy
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
 
@@ -78,7 +78,7 @@ PUBLIC_IP=$(curl -fsS --max-time 5 ifconfig.me 2>/dev/null || echo "ВАША_IP"
 cat <<EOF
 
 ╔══════════════════════════════════════════════════╗
-║           Мережа Тризуб запущена!                ║
+║           MineLegacy запущено!                ║
 ╠══════════════════════════════════════════════════╣
 ║  Адреса для гри:  ${PUBLIC_IP}:25565
 ║  Версія:          Minecraft ${MC_VERSION} (+ ViaVersion)

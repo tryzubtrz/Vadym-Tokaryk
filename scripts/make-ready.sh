@@ -287,7 +287,7 @@ RCON_PASS=$(openssl rand -hex 8)
 echo "$RCON_PASS" > "$ROOT/config/rcon.password"
 
 # Фіксовані rcon порти простіше
-declare -A RCON_PORTS=([lobby]=25580 [minigames]=25581 [survival]=25582 [skyblock]=25583 [prison]=25584 [factions]=25585)
+declare -A RCON_PORTS=([lobby]=25580 [minigames]=25581 [survival]=25582 [skyblock]=25583 [prison]=25584 [factions]=25585 [anarchy]=25586)
 for s in "${SERVERS[@]}"; do
   props="$ROOT/servers/$s/server.properties"
   python3 - <<PY

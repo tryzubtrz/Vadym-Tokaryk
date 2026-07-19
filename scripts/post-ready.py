@@ -20,6 +20,7 @@ RCON_PORTS = {
     "skyblock": 25583,
     "prison": 25584,
     "factions": 25585,
+    "anarchy": 25586,
 }
 
 
