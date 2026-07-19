@@ -1,1 +1,22 @@
 name: default
+permissions:
+- bw.command.join
+- bw.command.leave
+- bw.command.list
+- bw.command.rejoin
+- essentials.balance
+- essentials.help
+- essentials.home
+- essentials.kit
+- essentials.kits.novachok
+- essentials.msg
+- essentials.pay
+- essentials.sethome
+- essentials.spawn
+- essentials.tpa
+- essentials.tpaccept
+- iridiumskyblock.island.create
+- iridiumskyblock.island.home
+prefixes:
+- '&7Гравець &f':
+    priority: 0

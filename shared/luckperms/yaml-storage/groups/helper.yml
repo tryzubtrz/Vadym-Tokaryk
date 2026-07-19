@@ -1,0 +1,10 @@
+name: helper
+permissions:
+- essentials.kick
+- essentials.mute
+- essentials.tp
+parents:
+- vip
+prefixes:
+- '&9Хелпер &f':
+    priority: 50

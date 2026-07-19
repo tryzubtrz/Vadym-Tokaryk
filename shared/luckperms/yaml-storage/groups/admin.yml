@@ -1,0 +1,10 @@
+name: admin
+permissions:
+- '*'
+- bw.admin
+- tryzub.setup
+parents:
+- helper
+prefixes:
+- '&cАдмін &f':
+    priority: 100

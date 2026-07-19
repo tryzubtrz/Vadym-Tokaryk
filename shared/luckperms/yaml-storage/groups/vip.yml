@@ -1,0 +1,9 @@
+name: vip
+permissions:
+- essentials.fly
+- essentials.kits.vip
+parents:
+- default
+prefixes:
+- '&aVIP &f':
+    priority: 10
