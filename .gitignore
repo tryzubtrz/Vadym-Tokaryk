@@ -38,3 +38,13 @@ servers/*/bukkit.yml
 servers/*/config/
 servers/*/UKRAINIAN.txt
 servers/*/plugins/TryzubLobby/
+run/
+logs/
+servers/*/commands.yml
+servers/*/help.yml
+servers/*/permissions.yml
+servers/*/spigot.yml
+servers/*/version_history.json
+servers/*/IridiumSkyblock*/
+velocity/lang/
+velocity/plugins/
