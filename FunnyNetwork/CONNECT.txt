@@ -1,0 +1,16 @@
+FunnyNetwork ONLINE
+
+IP: bore.pub:42211
+
+Offline mode — any nickname
+Versions: 1.20.4–1.21.x
+
+Commands:
+  /menu
+  /server list
+  /server lobby|survival|skyblock|anarchy|bedwars|creative
+  /points
+
+Start/stop on host:
+  cd FunnyNetwork && ./bin/start-all.sh
+  ./bin/stop-all.sh
