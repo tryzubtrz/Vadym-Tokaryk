@@ -36,7 +36,7 @@ health:
 
 messages:
   # To disable Join or Quit Message just write "-"
-  join_message: '<gray>»</gray> Вітаємо в <gradient:#0057B7:#FFD700>Тризуб</gradient>, <gradient:#8AF5C3:#32D7A1>%player%</gradient>!'
+  join_message: '<gray>»</gray> Вітаємо в <gradient:#0057B7:#FFD700>MineLegacy</gradient>, <gradient:#8AF5C3:#32D7A1>%player%</gradient>!'
   quit_message: '<gray>«</gray> <gradient:#F87171:#FB923C>%player%</gradient> вийшов.'
 
   setspawn_message: '<gradient:#22C55E:#16A34A>Спавн встановлено.</gradient>'
@@ -99,5 +99,5 @@ boostpads:
 
 tablist:
   enabled: true
-  header: '\n <gradient:#0057B7:#FFD700><bold>Тризуб</bold></gradient> \n <gray>Привіт, %player%!</gray> \n'
+  header: '\n <gradient:#0057B7:#FFD700><bold>MineLegacy</bold></gradient> \n <gray>Привіт, %player%!</gray> \n'
   footer: '\n <green>Онлайн: %online_playercount%</green> <gray>|</gray> <aqua>/server</aqua> \n'

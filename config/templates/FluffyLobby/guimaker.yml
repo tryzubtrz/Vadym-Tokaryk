@@ -1,89 +1,56 @@
-###
-# Меню вибору серверів мережі Тризуб (українською)
-###
-
 menus:
-
   server_selector:
-    title: "<bold><gradient:#0057B7:#FFD700>Тризуб — вибір режиму</gradient></bold>"
+    title: "<bold><gradient:#FFD700:#FF4500>⚡ MineLegacy — режими</gradient></bold>"
     rows: 3
-
     open_item:
       material: PAPER
       click_action: "RIGHT"
-
     background_item:
-      material: GRAY_STAINED_GLASS_PANE
-
+      material: BLACK_STAINED_GLASS_PANE
     items:
       - slot: 10
-        material: NETHER_STAR
-        name: "<bold><gradient:#B3EAFE:#60A5FA>Лобі</gradient></bold>"
-        lore:
-          - "<gray>⮞ <white>Головний хаб мережі</white>"
-        action: connect
-        server: "lobby"
-
-      - slot: 11
         material: RED_BED
-        name: "<bold><gradient:#F87171:#FB923C>Міні-ігри</gradient></bold>"
-        lore:
-          - "<gray>⮞ <white>BedWars з друзями</white>"
+        name: "<bold><red>BedWars / Міні-ігри</red></bold>"
+        lore: ["<gray>Класичні міні-ігри</gray>"]
         action: connect
         server: "minigames"
-
-      - slot: 12
+      - slot: 11
         material: GRASS_BLOCK
-        name: "<bold><gradient:#86EFAC:#22C55E>Survival</gradient></bold>"
-        lore:
-          - "<gray>⮞ <white>Класичне виживання</white>"
+        name: "<bold><green>Survival</green></bold>"
+        lore: ["<gray>Класичне виживання</gray>"]
         action: connect
         server: "survival"
-
-      - slot: 14
+      - slot: 12
         material: OAK_SAPLING
-        name: "<bold><gradient:#67E8F9:#06B6D4>Skyblock</gradient></bold>"
-        lore:
-          - "<gray>⮞ <white>Острів у небі</white>"
+        name: "<bold><aqua>Skyblock</aqua></bold>"
+        lore: ["<gray>Острів у небі</gray>"]
         action: connect
         server: "skyblock"
-
-      - slot: 15
+      - slot: 13
+        material: NETHER_STAR
+        name: "<bold><yellow>Лобі</yellow></bold>"
+        action: connect
+        server: "lobby"
+      - slot: 14
         material: IRON_PICKAXE
-        name: "<bold><gradient:#FCD34D:#F59E0B>Prison</gradient></bold>"
-        lore:
-          - "<gray>⮞ <white>Шахти та ранги</white>"
+        name: "<bold><gold>Prison</gold></bold>"
         action: connect
         server: "prison"
-
-      - slot: 16
+      - slot: 15
         material: DIAMOND_SWORD
-        name: "<bold><gradient:#C084FC:#7C3AED>Factions</gradient></bold>"
-        lore:
-          - "<gray>⮞ <white>Війни фракцій</white>"
+        name: "<bold><light_purple>Factions</light_purple></bold>"
         action: connect
         server: "factions"
-
-  help_menu:
-    title: "<bold><gradient:#0057B7:#FFD700>Довідка Тризуб</gradient></bold>"
-    rows: 3
-
-    open_item:
-      material: BOOK
-      click_action: "RIGHT"
-
-    background_item:
-      material: BLUE_STAINED_GLASS_PANE
-
-    items:
-      - slot: 13
-        material: COMPASS
-        name: "<bold>Команди</bold>"
-        lore:
-          - "<gray>/server <назва> — перехід</gray>"
-          - "<gray>lobby · minigames · survival</gray>"
-          - "<gray>skyblock · prison · factions</gray>"
+      - slot: 16
+        material: TNT
+        name: "<bold><dark_red>Anarchy</dark_red></bold>"
+        lore: ["<gray>Без правил</gray>"]
+        action: connect
+        server: "anarchy"
+      - slot: 22
+        material: EMERALD
+        name: "<bold><gold>Донат /donate</gold></bold>"
+        lore: ["<yellow>VIP · Premium · Legend · Sponsor</yellow>"]
         action: command
-        commands:
-          - "server"
+        commands: ["donate"]
         run-as: PLAYER

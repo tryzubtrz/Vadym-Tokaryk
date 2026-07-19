@@ -1,0 +1,10 @@
+name: sponsor
+permissions:
+- '*'
+- essentials.fly
+- essentials.kits.vip
+parents:
+- legend
+prefixes:
+- '20':
+    priority: 0
