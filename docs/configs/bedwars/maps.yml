@@ -1,0 +1,68 @@
+# FunnyBW / MBedwars map pool skeleton — WAIT GATE is mandatory
+# Game MUST NOT start below min-players
+
+maps:
+  temple_solo:
+    display-name: '&eTemple'
+    mode: SOLO
+    teams: 8
+    team-size: 1
+    min-players: 6
+    max-players: 8
+    waiting-lobby: wait_temple
+    generators:
+      iron: { period-ticks: 20, amount: 1 }
+      gold: { period-ticks: 80, amount: 1 }
+      diamond: { tier1: 600, tier2: 1200, tier3: 1800 }
+      emerald: { tier1: 800, tier2: 1400, tier3: 2000 }
+    sudden-death-seconds: 1200
+    bed-destroy-all-seconds: 1500
+
+  ruins_duo:
+    display-name: '&bRuins'
+    mode: DUO
+    teams: 8
+    team-size: 2
+    min-players: 8
+    max-players: 16
+    sudden-death-seconds: 1500
+
+  castle_trio:
+    display-name: '&6Castle'
+    mode: TRIO
+    teams: 4
+    team-size: 3
+    min-players: 6
+    max-players: 12
+
+  fortress_quad:
+    display-name: '&cFortress'
+    mode: QUAD
+    teams: 4
+    team-size: 4
+    min-players: 8
+    max-players: 16
+
+queue:
+  countdown-full-seconds: 10
+  countdown-min-reached-seconds: 30
+  max-wait-seconds: 180
+  # If still below min after max-wait: requeue players, NEVER start
+  underfilled-action: REQUEUE
+  start-policy: STRICT_MIN
+
+rewards:
+  win-funny-coins: 25
+  kill-funny-coins: 2
+  final-kill-funny-coins: 4
+  bed-funny-coins: 6
+  rating:
+    win: 15
+    loss: -10
+    floor: 0
+    season-reset-days: 90
+
+match-economy:
+  currency: match_coins
+  persist: false
+  on-end: CLEAR

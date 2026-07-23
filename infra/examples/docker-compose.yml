@@ -1,0 +1,32 @@
+# Dev / stage sketch — NOT a 5k-prod topology (use bare metal for game nodes)
+services:
+  mariadb:
+    image: mariadb:11.4
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: funny_global
+    ports:
+      - "3306:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ../../docs/sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --max-connections=400
+      - --innodb-buffer-pool-size=1G
+
+  redis:
+    image: redis:7.2-alpine
+    command: redis-server --requirepass changeme --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # Game servers usually run on host/Pterodactyl, not Compose.
+  # Keep data services here for local plugin development.
+
+volumes:
+  mariadb_data:
+  redis_data:
