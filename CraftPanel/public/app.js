@@ -8,8 +8,12 @@ async function api(path, opts = {}) {
   const res = await fetch(path, { ...opts, headers, credentials: 'include' })
   const data = await res.json().catch(() => ({}))
   if (res.status === 401) {
-    showLogin()
-    throw new Error('auth')
+    const msg = data.error || data.message || 'Невірний логін або пароль'
+    if (path !== '/api/login') {
+      showLogin()
+      throw new Error('Потрібен вхід')
+    }
+    throw new Error(msg)
   }
   if (!res.ok) throw new Error(data.error || data.message || ('HTTP ' + res.status))
   return data
@@ -326,10 +330,12 @@ function renderNewServer() {
 $('loginForm').onsubmit = async (e) => {
   e.preventDefault()
   $('loginErr').textContent = ''
+  token = ''
+  localStorage.removeItem('cp_token')
   try {
     const r = await api('/api/login', {
       method: 'POST',
-      body: JSON.stringify({ user: loginUser.value, pass: loginPass.value }),
+      body: JSON.stringify({ user: loginUser.value.trim(), pass: loginPass.value }),
     })
     token = r.token
     localStorage.setItem('cp_token', token)
@@ -337,7 +343,7 @@ $('loginForm').onsubmit = async (e) => {
     await refreshDash()
     setView('dashboard')
   } catch (err) {
-    $('loginErr').textContent = err.message || 'Помилка входу'
+    $('loginErr').textContent = (err && err.message) || 'Помилка входу'
   }
 }
 

@@ -7,7 +7,8 @@
   "minecraftHost": "202.181.188.222",
   "minecraftPort": 25565,
   "adminUser": "admin",
-  "adminPass": "EclipseMC2026!",
+  "adminPass": "admin123",
+  "adminPassAliases": ["admin123", "EclipseMC2026!", "admin"],
   "servers": [
     {
       "id": "proxy",

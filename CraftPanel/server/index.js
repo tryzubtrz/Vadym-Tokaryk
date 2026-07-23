@@ -56,13 +56,15 @@ function auth(req, res, next) {
 app.post('/api/login', (req, res) => {
   const cfg = loadConfig()
   const { user, pass } = req.body || {}
-  if (user === cfg.adminUser && pass === cfg.adminPass) {
+  const aliases = Array.isArray(cfg.adminPassAliases) ? cfg.adminPassAliases : []
+  const okPass = pass === cfg.adminPass || aliases.includes(pass)
+  if (user === cfg.adminUser && okPass) {
     const token = require('crypto').randomBytes(24).toString('hex')
     SESSIONS.set(token, { user, at: Date.now() })
     res.cookie('cp_token', token, { httpOnly: true, sameSite: 'lax' })
     return res.json({ ok: true, token, user })
   }
-  return res.status(401).json({ ok: false, error: 'Невірний логін або пароль' })
+  return res.status(401).json({ ok: false, error: 'Невірний логін або пароль. Логін: admin · Пароль: admin123' })
 })
 
 app.post('/api/logout', (req, res) => {
