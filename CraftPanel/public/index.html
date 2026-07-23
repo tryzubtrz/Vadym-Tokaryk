@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CraftPanel · EclipseMC</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="loginScreen" class="login-screen">
+    <form id="loginForm" class="login-card">
+      <div class="brand-row"><span class="mark"></span><div><b>CraftPanel</b><small>EclipseMC Network</small></div></div>
+      <p class="muted">Керування хостингом · 202.181.188.222</p>
+      <label>Логін<input id="loginUser" value="admin" autocomplete="username" /></label>
+      <label>Пароль<input id="loginPass" type="password" autocomplete="current-password" /></label>
+      <button type="submit" class="btn primary">Увійти</button>
+      <p id="loginErr" class="err"></p>
+    </form>
+  </div>
+
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="side-brand">
+        <div class="logo-sq">C</div>
+        <div>
+          <div class="side-title">CraftPanel</div>
+          <div class="side-sub">EclipseMC Network</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <button data-view="dashboard" class="nav-item active">Dashboard</button>
+        <button data-view="hosting" class="nav-item">Хостинг</button>
+        <button data-view="players" class="nav-item">Гравці</button>
+        <button data-view="admins" class="nav-item">Адміністратори</button>
+        <button data-view="ai" class="nav-item ai">Eclipse AI</button>
+        <div class="nav-label">ІНСТРУМЕНТИ</div>
+        <button data-view="ranks" class="nav-item">Ранги</button>
+        <button data-view="economy" class="nav-item">Економіка</button>
+        <button data-view="announce" class="nav-item">Оголошення</button>
+        <button data-view="schedule" class="nav-item">Планувальник</button>
+        <button data-view="stats" class="nav-item">Статистика</button>
+        <div class="nav-label">СЕРВЕРИ</div>
+        <button data-view="newserver" class="nav-item new">+ Новий сервер</button>
+      </nav>
+      <button id="btnLogout" class="logout">Вийти</button>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Dashboard</h1>
+          <p class="top-sub" id="networkLine">EclipseMC Network</p>
+        </div>
+        <div class="top-actions">
+          <button class="btn primary" data-view-jump="newserver">Create Server</button>
+          <button class="btn ghost" id="btnRefresh">Refresh</button>
+        </div>
+      </header>
+
+      <section id="view-dashboard" class="view"></section>
+      <section id="view-hosting" class="view hidden"></section>
+      <section id="view-players" class="view hidden"></section>
+      <section id="view-admins" class="view hidden"></section>
+      <section id="view-ai" class="view hidden"></section>
+      <section id="view-ranks" class="view hidden"></section>
+      <section id="view-economy" class="view hidden"></section>
+      <section id="view-announce" class="view hidden"></section>
+      <section id="view-schedule" class="view hidden"></section>
+      <section id="view-stats" class="view hidden"></section>
+      <section id="view-newserver" class="view hidden"></section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
