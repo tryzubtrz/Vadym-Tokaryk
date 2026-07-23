@@ -1,28 +1,21 @@
 # FunnyNetwork
 
-Turnkey Minecraft network (FunnyMC-class blueprint + runnable stack).
+Minecraft network blueprint + turnkey stack + **Windows launcher**.
 
-## Play now (this environment)
+## Download launcher (Windows)
 
-See `FunnyNetwork/CONNECT.txt` — currently:
+Artifact: `FunnyNetwork-win-unpacked.zip`  
+Unpack → run `FunnyNetwork.exe` → set VPS IP in **Настройки**.
 
-```
-bore.pub:42211
-```
+Source: [`FunnyLauncher/`](FunnyLauncher/)
 
-Offline, any nick. In-game: `/menu`, `/server list`.
-
-## Launch package
+## VPS Status API (player counts per mode)
 
 ```bash
-cd FunnyNetwork
-./bin/setup-download.sh      # jars + plugins
-./bin/assemble-runtime.sh    # servers + configs
-./bin/prepare-first-boot.sh  # generate worlds (once)
-./bin/start-all.sh           # start network + public tunnel
-cat runtime/CONNECT_ADDR
+cd FunnyLauncher/status-api && npm install && npm start
+# http://VPS:8787/api/status
 ```
 
-## Architecture docs
+## Server stack
 
-See [`docs/00-IMPLEMENTATION-PROMPT.md`](docs/00-IMPLEMENTATION-PROMPT.md).
+See [`FunnyNetwork/`](FunnyNetwork/) and [`docs/`](docs/).

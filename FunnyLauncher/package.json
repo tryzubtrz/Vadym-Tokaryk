@@ -1,0 +1,20 @@
+{
+  "name": "funnynetwork-launcher",
+  "version": "1.0.0",
+  "description": "FunnyNetwork desktop launcher — modes, online, connect to VPS",
+  "main": "src/main.js",
+  "author": "FunnyNetwork",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "pack:win": "electron-packager . FunnyNetwork --platform=win32 --arch=x64 --out=dist --overwrite --asar --icon=renderer/assets/icon.ico",
+    "pack:dir": "electron-packager . FunnyNetwork --platform=win32 --arch=x64 --out=dist --overwrite --asar"
+  },
+  "dependencies": {
+    "minecraft-server-util": "^5.1.9"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-packager": "^17.1.2"
+  }
+}

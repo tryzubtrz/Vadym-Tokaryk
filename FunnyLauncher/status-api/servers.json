@@ -1,0 +1,11 @@
+{
+  "proxy": { "host": "127.0.0.1", "port": 25565 },
+  "modes": {
+    "lobby": { "host": "127.0.0.1", "port": 25566 },
+    "survival": { "host": "127.0.0.1", "port": 25570 },
+    "skyblock": { "host": "127.0.0.1", "port": 25571 },
+    "anarchy": { "host": "127.0.0.1", "port": 25572 },
+    "bedwars": { "host": "127.0.0.1", "port": 25573 },
+    "creative": { "host": "127.0.0.1", "port": 25574 }
+  }
+}
