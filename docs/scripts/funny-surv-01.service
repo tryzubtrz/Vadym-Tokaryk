@@ -1,0 +1,21 @@
+[Unit]
+Description=FunnyNetwork surv-01
+After=network.target mariadb.service redis.service
+
+[Service]
+Type=simple
+User=minecraft
+WorkingDirectory=/opt/funny/servers/surv-01
+Environment=FUNNY_SERVER_ID=surv-01
+Environment=FUNNY_SYNC_GROUP=surv
+Environment=FUNNY_MODE=surv
+Environment=FUNNY_SERVER_ROLE=game
+Environment=MEMORY=16G
+ExecStart=/opt/funny/scripts/start-paper.sh /opt/funny/servers/surv-01
+ExecStop=/bin/kill -SIGINT $MAINPID
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

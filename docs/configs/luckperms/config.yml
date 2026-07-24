@@ -1,0 +1,37 @@
+# LuckPerms skeleton (identical storage on proxy + all backends)
+server: ${FUNNY_SERVER_ID}   # lobby-01 / surv-01 / ...
+storage-method: mysql
+
+data:
+  address: mariadb.internal:3306
+  database: funny_luckperms
+  username: lp_user
+  password: "CHANGE_ME"
+  pool-settings:
+    maximum-pool-size: 5
+    minimum-idle: 2
+    maximum-lifetime: 1800000
+    connection-timeout: 5000
+
+sync-minutes: -1
+messenger-service: redis
+redis:
+  enabled: true
+  address: redis.internal
+  port: 6379
+  password: "CHANGE_ME"
+  channel: luckperms
+
+# Tracks (create via /lp createrank / editor):
+# default -> vip -> premium -> elite -> legend
+# staff: helper -> mod -> admin -> owner
+
+# Example meta prefixes (apply in editor):
+# default: &7
+# vip: &aVIP &7
+# premium: &bPremium &7
+# elite: &dElite &7
+# legend: &6&lLEGEND &7
+# helper: &9Helper &7
+# mod: &cMod &7
+# admin: &4Admin &7

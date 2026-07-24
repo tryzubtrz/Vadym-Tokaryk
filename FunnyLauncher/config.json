@@ -1,0 +1,16 @@
+{
+  "serverHost": "127.0.0.1",
+  "serverPort": 25565,
+  "statusApiUrl": "http://127.0.0.1:8787/api/status",
+  "refreshSeconds": 8,
+  "brand": "FunnyNetwork",
+  "tagline": "Survival · SkyBlock · BedWars · Anarchy",
+  "modes": [
+    { "id": "lobby", "name": "Лобби", "icon": "⭐", "color": "#F2C14E", "desc": "Главный хаб сети" },
+    { "id": "survival", "name": "Выживание", "icon": "🌿", "color": "#3DDC97", "desc": "Классика, экономика, приваты" },
+    { "id": "skyblock", "name": "SkyBlock", "icon": "🏝️", "color": "#4CC9F0", "desc": "Остров и прокачка" },
+    { "id": "anarchy", "name": "Анархия", "icon": "💥", "color": "#EF476F", "desc": "ПВП без ограничений" },
+    { "id": "bedwars", "name": "BedWars", "icon": "🛏️", "color": "#FF6B6B", "desc": "Командные мини-игры" },
+    { "id": "creative", "name": "Creative", "icon": "🎨", "color": "#B8C1EC", "desc": "Строительство без лимитов" }
+  ]
+}

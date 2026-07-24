@@ -1,0 +1,92 @@
+{
+  "brand": "CraftPanel",
+  "networkName": "EclipseMC Network",
+  "vpsHostname": "begonia-rutile536049.vm-host.xyz",
+  "vpsIp": "202.181.188.222",
+  "panelPort": 8080,
+  "minecraftHost": "202.181.188.222",
+  "minecraftPort": 25565,
+  "adminUser": "admin",
+  "adminPass": "admin123",
+  "adminPassAliases": ["admin123", "EclipseMC2026!", "admin"],
+  "servers": [
+    {
+      "id": "proxy",
+      "name": "EclipseMC Network",
+      "type": "Velocity",
+      "version": "1.21.x",
+      "port": 25565,
+      "ramMb": 2048,
+      "desc": "Proxy · play IP"
+    },
+    {
+      "id": "lobby",
+      "name": "Lobby",
+      "type": "Paper",
+      "version": "1.21.4",
+      "port": 25566,
+      "ramMb": 2048,
+      "desc": "Головне лобі / NPC / селектор"
+    },
+    {
+      "id": "survival",
+      "name": "Survival",
+      "type": "Paper",
+      "version": "1.21.4",
+      "port": 25570,
+      "ramMb": 2048,
+      "desc": "Виживання"
+    },
+    {
+      "id": "hungergames",
+      "name": "Голодні ігри",
+      "type": "Spigot",
+      "version": "1.8.8",
+      "port": 25566,
+      "ramMb": 2048,
+      "desc": "EclipseHungerGames · arena hgarena · /hg join",
+      "live": true,
+      "note": "EclipseHungerGames active on Lobby. Arena hgarena ready. NPC in hub + Server Selector (slot 20). /hg join"
+    },
+    {
+      "id": "cannon",
+      "name": "Cannon PvP",
+      "type": "Spigot",
+      "version": "1.8.8",
+      "port": 25571,
+      "ramMb": 2048,
+      "desc": "Cannon / crystal PvP"
+    },
+    {
+      "id": "practice",
+      "name": "Practice PvP",
+      "type": "Spigot",
+      "version": "1.8.8",
+      "port": 25572,
+      "ramMb": 2048,
+      "desc": "Дуелі / practice"
+    },
+    {
+      "id": "prison",
+      "name": "Prison",
+      "type": "Paper",
+      "version": "1.21.4",
+      "port": 25573,
+      "ramMb": 2048,
+      "desc": "Шахти / prestiges"
+    },
+    {
+      "id": "skyblock",
+      "name": "SkyBlock",
+      "type": "Paper",
+      "version": "1.21.4",
+      "port": 25574,
+      "ramMb": 2048,
+      "desc": "Острови"
+    }
+  ],
+  "ai": {
+    "username": "EclipseAI",
+    "enabled": true
+  }
+}

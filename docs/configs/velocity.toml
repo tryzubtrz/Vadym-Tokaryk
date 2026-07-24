@@ -1,0 +1,57 @@
+# Velocity skeleton — /opt/funny/proxy/velocity.toml
+config-version = "2.7"
+
+bind = "0.0.0.0:25565"
+motd = "<gradient:#1F6F8B:#F2C14E><bold>FunnyNetwork</bold></gradient> <gray>|</gray> <white>Survival</white> <gray>·</gray> <white>SkyBlock</white> <gray>·</gray> <white>BedWars</white>"
+show-max-players = 8000
+online-mode = true
+# Пират-режим: online-mode=false + AuthMe на лобби + session Redis
+force-key-authentication = true
+player-info-forwarding-mode = "modern"
+forwarding-secret-file = "forwarding.secret"
+
+announce-forge = false
+kick-existing-players = false
+ping-passthrough = "DISABLED"
+
+[servers]
+lobby-01 = "10.0.1.11:25566"
+lobby-02 = "10.0.1.12:25566"
+lobby-03 = "10.0.1.13:25566"
+limbo-01 = "10.0.1.10:25565"
+lb-surv = "10.0.2.11:25566"
+surv-01 = "10.0.2.21:25570"
+surv-02 = "10.0.2.22:25570"
+lb-bw = "10.0.3.11:25566"
+bw-arena-01 = "10.0.3.21:25580"
+lb-sb = "10.0.4.11:25566"
+sb-01 = "10.0.4.21:25570"
+# ... добавляй все backend'ы
+
+try = ["lobby-01", "lobby-02", "lobby-03"]
+
+[forced-hosts]
+"fl.funnynetwork.net" = ["lobby-01"]
+"surv.funnynetwork.net" = ["lb-surv"]
+"bw.funnynetwork.net" = ["lb-bw"]
+
+[advanced]
+compression-threshold = 256
+compression-level = -1
+login-ratelimit = 2000
+connection-timeout = 5000
+read-timeout = 30000
+haproxy-protocol = false
+tcp-fast-open = false
+bungee-plugin-message-channel = true
+show-ping-requests = false
+failover-on-unexpected-server-disconnect = true
+announce-proxy-commands = true
+log-command-executions = false
+log-player-connections = true
+
+[query]
+enabled = true
+port = 25565
+map = "FunnyNetwork"
+show-plugins = false

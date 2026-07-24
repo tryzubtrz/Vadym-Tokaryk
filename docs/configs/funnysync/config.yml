@@ -1,0 +1,39 @@
+# FunnySync / HuskSync — GROUP ISOLATION (critical)
+# Each mode = own sync group. Never use one global inventory sync.
+
+server-id: ${FUNNY_SERVER_ID}
+sync-group: ${FUNNY_SYNC_GROUP}   # surv | ana | sb | prison | farm | creative | none
+
+database:
+  type: mysql
+  host: mariadb.internal
+  port: 3306
+  database: funny_sync
+  username: sync_user
+  password: "CHANGE_ME"
+  # Table prefix includes sync-group automatically: surv_players, sb_players, ...
+
+redis:
+  host: redis.internal
+  port: 6379
+  password: "CHANGE_ME"
+  # locks: sync-lock:{group}:{uuid}
+
+sync:
+  inventory: true
+  ender-chest: true
+  experience: true
+  health: false          # reset on mode join often better
+  hunger: false
+  potion-effects: false
+  advancements: false
+  location: true         # within group only
+  locked-maps: false
+
+# Minigame arenas:
+# FUNNY_SYNC_GROUP=none → do not load/save persistent inv; arena plugin owns state
+
+failover:
+  lock-timeout-seconds: 15
+  deny-join-if-locked: true
+  snapshot-on-save: true

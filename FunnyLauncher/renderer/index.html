@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FunnyNetwork</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="noise"></div>
+
+  <header class="top">
+    <div class="brand">
+      <div class="logo-mark" aria-hidden="true"></div>
+      <div>
+        <h1 id="brandName">FunnyNetwork</h1>
+        <p id="tagline" class="tagline">Survival · SkyBlock · BedWars · Anarchy</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="ghost" id="btnSettings" title="VPS / API">Настройки</button>
+      <button type="button" class="ghost" id="btnRefresh">Обновить</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="hero-panel">
+      <div class="status-pill" id="livePill">
+        <span class="dot"></span>
+        <span id="liveText">Проверка…</span>
+      </div>
+      <h2 class="hero-title">Играй сейчас</h2>
+      <p class="hero-sub" id="motdLine">Подключение к VPS Minecraft</p>
+
+      <div class="stats-row">
+        <div class="stat">
+          <div class="stat-label">Онлайн сети</div>
+          <div class="stat-value" id="totalOnline">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Слотов</div>
+          <div class="stat-value" id="totalMax">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Пинг</div>
+          <div class="stat-value" id="latency">—</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Версия</div>
+          <div class="stat-value small" id="version">—</div>
+        </div>
+      </div>
+
+      <div class="connect-box">
+        <div class="ip-block">
+          <span class="ip-label">IP сервера</span>
+          <code id="serverIp">—</code>
+        </div>
+        <div class="cta-row">
+          <button type="button" class="primary" id="btnCopy">Скопировать IP</button>
+          <button type="button" class="secondary" id="btnCopyPort">Только хост</button>
+        </div>
+        <p class="hint">Открой Minecraft → Мультиплеер → Прямое подключение → вставь IP</p>
+      </div>
+    </section>
+
+    <section class="modes-panel">
+      <div class="modes-head">
+        <h2>Режимы / мини-игры</h2>
+        <span class="updated" id="updatedAt">—</span>
+      </div>
+      <div class="modes-grid" id="modesGrid"></div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <dialog id="settingsDialog">
+    <form method="dialog" id="settingsForm">
+      <h3>Подключение к VPS</h3>
+      <label>Хост Minecraft (Velocity)
+        <input name="serverHost" id="inpHost" required />
+      </label>
+      <label>Порт
+        <input name="serverPort" id="inpPort" type="number" min="1" max="65535" required />
+      </label>
+      <label>Status API URL (онлайн по режимам)
+        <input name="statusApiUrl" id="inpApi" placeholder="http://YOUR_VPS:8787/api/status" />
+      </label>
+      <div class="dialog-actions">
+        <button type="submit" class="primary" value="save">Сохранить</button>
+        <button type="button" class="ghost" id="btnCloseSettings">Отмена</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
