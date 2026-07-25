@@ -110,6 +110,13 @@ class OrderExecutor:
             return {"ok": False, "reason": str(exc)}
 
         fill_price = float(order.get("average") or order.get("price") or price)
+        if self.exchange.settings.is_spot and not self.exchange.is_paper:
+            self.exchange.update_spot_cost_basis_fill(
+                symbol, side=side, amount=amount, price=fill_price
+            )
+            await self.state.set_kv(
+                "spot_cost_basis", self.exchange.get_spot_cost_basis()
+            )
         await self.state.record_trade(
             TradeRecord(
                 symbol=symbol,
@@ -216,6 +223,14 @@ class OrderExecutor:
                 )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "reason": str(exc)}
+            if self.exchange.settings.is_spot and not self.exchange.is_paper:
+                fill = float(order.get("average") or order.get("price") or pos.mark_price)
+                self.exchange.update_spot_cost_basis_fill(
+                    symbol, side=side, amount=amount, price=fill
+                )
+                await self.state.set_kv(
+                    "spot_cost_basis", self.exchange.get_spot_cost_basis()
+                )
         else:
             try:
                 order = await self.exchange.close_position(symbol)
@@ -223,16 +238,27 @@ class OrderExecutor:
                 return {"ok": False, "reason": str(exc)}
             if order is None:
                 return {"ok": False, "reason": "close_failed"}
+            if self.exchange.settings.is_spot and not self.exchange.is_paper:
+                await self.state.set_kv(
+                    "spot_cost_basis", self.exchange.get_spot_cost_basis()
+                )
+
+        fill_price = float(order.get("average") or order.get("price") or pos.mark_price)
+        fill_size = float(order.get("amount") or pos.size)
+        realized = 0.0
+        if pos.entry_price > 0 and fill_price > 0:
+            direction = 1.0 if pos.side == Side.LONG else -1.0
+            realized = (fill_price - pos.entry_price) * fill_size * direction
 
         await self.state.record_trade(
             TradeRecord(
                 symbol=symbol,
                 side=pos.side.value,
                 action=decision.action.value,
-                size=float(order.get("amount") or pos.size),
-                price=float(order.get("average") or order.get("price") or pos.mark_price),
+                size=fill_size,
+                price=fill_price,
                 leverage=pos.leverage,
-                pnl=float(order.get("pnl") or 0),
+                pnl=float(order.get("pnl") or realized),
                 reasoning=decision.reasoning,
                 mode=account.mode.value
                 if isinstance(account.mode, TradingMode)
@@ -244,10 +270,16 @@ class OrderExecutor:
             "action": decision.action.value,
             "symbol": symbol,
             "order": order,
+            "pnl": float(order.get("pnl") or realized),
             "reasoning": decision.reasoning,
         }
 
     async def emergency_flatten(self) -> list[dict[str, Any]]:
         """Close everything — used by /emergency_stop."""
         logger.warning("emergency_flatten")
-        return await self.exchange.close_all_positions()
+        orders = await self.exchange.close_all_positions()
+        if self.exchange.settings.is_spot and not self.exchange.is_paper:
+            await self.state.set_kv(
+                "spot_cost_basis", self.exchange.get_spot_cost_basis()
+            )
+        return orders

@@ -107,7 +107,7 @@ class TradeDecision(BaseModel):
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     reasoning: str = ""
     stop_loss_pct: float | None = Field(default=None, ge=0.1, le=10.0)
-    take_profit_pct: float | None = Field(default=None, ge=0.1, le=30.0)
+    take_profit_pct: float | None = Field(default=None, ge=0.05, le=30.0)
 
 
 class AgentDecisionBatch(BaseModel):

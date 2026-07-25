@@ -28,6 +28,8 @@ os.environ.setdefault("TRADING_STYLE", "momentum_scalp")
 os.environ.setdefault("CANDLE_TIMEFRAME", "5m")
 os.environ.setdefault("AGENT_LOOP_INTERVAL_SEC", "30")
 os.environ.setdefault("MAX_POSITION_PCT", "30")
+os.environ.setdefault("ZERO_FEE_MODE", "true")
+os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.12")
 os.environ.setdefault("DASHBOARD_PASSWORD", "astraforge")
 os.environ.setdefault("DASHBOARD_PORT", "8080")
 os.environ["DATABASE_PATH"] = str((ROOT / "data" / "astraforge_live.db").resolve())
@@ -63,6 +65,8 @@ async def main() -> None:
         max_position_pct=float(os.getenv("MAX_POSITION_PCT", "30")),
         max_open_positions=int(os.getenv("MAX_OPEN_POSITIONS", "2")),
         max_leverage=1.0,
+        zero_fee_mode=os.getenv("ZERO_FEE_MODE", "true").lower() in {"1", "true", "yes"},
+        min_take_profit_pct=float(os.getenv("MIN_TAKE_PROFIT_PCT", "0.12")),
         database_path=os.environ["DATABASE_PATH"],
         dashboard_host=os.getenv("DASHBOARD_HOST", "0.0.0.0"),
         dashboard_port=int(os.getenv("DASHBOARD_PORT", "8080")),

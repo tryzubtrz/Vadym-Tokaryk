@@ -97,6 +97,8 @@ class ExchangeClient:
         self._paper_equity = settings.paper_starting_equity
         self._paper_positions: dict[str, dict[str, Any]] = {}
         self._paper_realized_today = 0.0
+        # Spot cost basis: symbol -> {"entry": avg_price, "size": qty}
+        self._spot_cost_basis: dict[str, dict[str, float]] = {}
 
     @property
     def mode(self) -> TradingMode:
@@ -389,6 +391,49 @@ class ExchangeClient:
             mode=self.mode,
         )
 
+    def set_spot_cost_basis(self, basis: dict[str, dict[str, float]]) -> None:
+        """Restore / replace spot average entries (survives process restarts via state)."""
+        self._spot_cost_basis = {
+            str(sym): {
+                "entry": float(v.get("entry") or 0),
+                "size": float(v.get("size") or 0),
+            }
+            for sym, v in (basis or {}).items()
+            if float((v or {}).get("entry") or 0) > 0
+        }
+
+    def get_spot_cost_basis(self) -> dict[str, dict[str, float]]:
+        return {k: dict(v) for k, v in self._spot_cost_basis.items()}
+
+    def update_spot_cost_basis_fill(
+        self,
+        symbol: str,
+        *,
+        side: str,
+        amount: float,
+        price: float,
+    ) -> None:
+        """Maintain VWAP entry for spot inventory after buys/sells."""
+        if amount <= 0 or price <= 0:
+            return
+        cur = self._spot_cost_basis.get(symbol)
+        if side == "buy":
+            if cur and cur.get("size", 0) > 0:
+                total = cur["size"] + amount
+                cur["entry"] = (cur["entry"] * cur["size"] + price * amount) / total
+                cur["size"] = total
+            else:
+                self._spot_cost_basis[symbol] = {"entry": price, "size": amount}
+            return
+        # sell / close
+        if not cur:
+            return
+        left = cur["size"] - amount
+        if left <= 1e-12:
+            self._spot_cost_basis.pop(symbol, None)
+        else:
+            cur["size"] = left
+
     async def _spot_positions_from_balance(self) -> list[PositionInfo]:
         """Treat non-fiat crypto balances as long spot positions."""
         bal = await self.fetch_balance_raw()
@@ -409,14 +454,20 @@ class ExchangeClient:
                 continue
             if px <= 0 or qty * px < 0.4:
                 continue
+            basis = self._spot_cost_basis.get(symbol) or {}
+            entry = float(basis.get("entry") or 0) or px
+            # Keep size in basis loosely in sync with exchange balance
+            if basis:
+                basis["size"] = qty
+            upnl = (px - entry) * qty
             out.append(
                 PositionInfo(
                     symbol=symbol,
                     side=Side.LONG,
                     size=qty,
-                    entry_price=px,
+                    entry_price=entry,
                     mark_price=px,
-                    unrealized_pnl=0.0,
+                    unrealized_pnl=upnl,
                     leverage=1.0,
                     notional=qty * px,
                 )
@@ -506,18 +557,35 @@ class ExchangeClient:
             raise
 
     async def close_position(self, symbol: str) -> dict[str, Any] | None:
-        positions = await self.fetch_positions()
+        if self.settings.is_spot and not self.is_paper:
+            positions = await self._spot_positions_from_balance()
+        else:
+            positions = await self.fetch_positions()
+            if self.settings.is_spot and not positions:
+                positions = await self._spot_positions_from_balance()
         target = next((p for p in positions if p.symbol == symbol), None)
         if not target:
             return None
         side = "sell" if target.side == Side.LONG else "buy"
-        return await self.create_market_order(
+        order = await self.create_market_order(
             symbol, side, target.size, reduce_only=True
         )
+        if self.settings.is_spot and not self.is_paper:
+            fill = float(order.get("average") or order.get("price") or target.mark_price or 0)
+            self.update_spot_cost_basis_fill(
+                symbol, side=side, amount=target.size, price=fill or target.mark_price
+            )
+        return order
 
     async def close_all_positions(self) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
-        for pos in await self.fetch_positions():
+        if self.settings.is_spot and not self.is_paper:
+            positions = await self._spot_positions_from_balance()
+        else:
+            positions = await self.fetch_positions()
+            if self.settings.is_spot and not positions:
+                positions = await self._spot_positions_from_balance()
+        for pos in positions:
             try:
                 order = await self.close_position(pos.symbol)
                 if order:

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Awaitable, Callable
+from typing import Any, Awaitable, Callable
 
 from astraforge.core.ai_agent import AIAgent
 from astraforge.core.circuit_breaker import BreakerReason, CircuitBreaker, circuit_breaker
@@ -15,9 +15,12 @@ from astraforge.core.config import Settings
 from astraforge.core.exchange import ExchangeClient
 from astraforge.core.goal_interpreter import GoalInterpreter
 from astraforge.core.models import (
+    ActionType,
     EquityPoint,
     GoalType,
     RiskProfile,
+    Side,
+    TradeDecision,
     TradingGoal,
     TradingMode,
 )
@@ -117,6 +120,48 @@ class TradingEngine:
         if goal:
             logger.info("restored_active_goal", raw=goal.raw_text)
 
+        # Spot average entries (needed for tiny take-profits / zero-fee exits)
+        if self.settings.is_spot:
+            basis = await self.state.get_kv("spot_cost_basis", {}) or {}
+            if not basis:
+                basis = await self._rebuild_spot_cost_basis_from_trades()
+            if basis:
+                self.exchange.set_spot_cost_basis(basis)
+                await self.state.set_kv("spot_cost_basis", self.exchange.get_spot_cost_basis())
+                logger.info("restored_spot_cost_basis", symbols=list(basis.keys()))
+
+    async def _rebuild_spot_cost_basis_from_trades(self) -> dict[str, dict[str, float]]:
+        """VWAP entry from recorded buys minus sells (best effort after restart)."""
+        trades = await self.state.recent_trades(200)
+        books: dict[str, dict[str, float]] = {}
+        # oldest → newest
+        for t in reversed(trades):
+            sym = t.symbol
+            if not sym or sym == "ALL":
+                continue
+            action = (t.action or "").lower()
+            qty = float(t.size or 0)
+            px = float(t.price or 0)
+            if qty <= 0 or px <= 0:
+                continue
+            cur = books.get(sym)
+            if action in {"open_long", "buy"}:
+                if cur and cur["size"] > 0:
+                    total = cur["size"] + qty
+                    cur["entry"] = (cur["entry"] * cur["size"] + px * qty) / total
+                    cur["size"] = total
+                else:
+                    books[sym] = {"entry": px, "size": qty}
+            elif action in {"close", "reduce", "close_all", "sell"}:
+                if not cur:
+                    continue
+                left = cur["size"] - qty
+                if left <= 1e-12:
+                    books.pop(sym, None)
+                else:
+                    cur["size"] = left
+        return books
+
     async def _run_loop(self) -> None:
         interval = max(15, int(self.settings.agent_loop_interval_sec))
         while self._running:
@@ -190,6 +235,39 @@ class TradingEngine:
             return
 
         markets = await self.agent.analyze_markets(self.exchange, self.settings.symbols)
+
+        # Hard scalp exits (esp. zero-fee): lock tiny green without waiting on LLM
+        auto_closes = await self._zero_fee_auto_exits(account, markets)
+        results = []
+        if auto_closes:
+            for decision in auto_closes:
+                result = await self.executor.execute(decision, account)
+                results.append(result)
+                if result.get("ok") and not result.get("rejected"):
+                    account = await self.exchange.get_account_snapshot(
+                        peak_equity=float(await self.state.get_kv("peak_equity", 0) or 0)
+                    )
+            closed_syms = {d.symbol for d in auto_closes if d.symbol}
+            self._last_status_summary = (
+                "[zero-fee auto TP] "
+                + "; ".join(
+                    f"close:{d.symbol}({d.confidence:.2f})" for d in auto_closes
+                )
+            )
+            await self.state.log_decision(
+                {
+                    "batch": {"decisions": [d.model_dump() for d in auto_closes]},
+                    "results": results,
+                    "pnl_today": pnl_today,
+                    "equity": account.equity,
+                    "reasoning": self._last_status_summary,
+                }
+            )
+            logger.info("tick_complete", summary=self._last_status_summary)
+            # Skip new entries this tick after locking profits
+            if closed_syms:
+                return
+
         batch = await self.agent.decide(
             account=account,
             markets=markets,
@@ -198,7 +276,6 @@ class TradingEngine:
             pnl_today=pnl_today,
         )
 
-        results = []
         for decision in batch.decisions:
             result = await self.executor.execute(decision, account)
             results.append(result)
@@ -218,6 +295,55 @@ class TradingEngine:
         await self.state.log_decision(payload)
         self._last_status_summary = self.agent.last_reasoning
         logger.info("tick_complete", summary=self._last_status_summary)
+
+    async def _zero_fee_auto_exits(
+        self,
+        account: Any,
+        markets: list[Any],
+    ) -> list[TradeDecision]:
+        """Close winners with tiny green when fees ≈ 0 and momentum cools."""
+        if not getattr(self.settings, "zero_fee_mode", True):
+            return []
+        if not account.positions:
+            return []
+        min_tp = float(getattr(self.settings, "min_take_profit_pct", 0.12))
+        lock_tp = max(min_tp * 2.5, 0.30)  # always bank stronger scalp
+        out: list[TradeDecision] = []
+        for p in account.positions:
+            if p.side != Side.LONG or p.entry_price <= 0 or p.mark_price <= 0:
+                continue
+            pnl_pct = ((p.mark_price - p.entry_price) / p.entry_price) * 100.0
+            if pnl_pct < min_tp:
+                continue
+            m = next((x for x in markets if x.symbol == p.symbol), None)
+            ind = (m.indicators if m else None) or {}
+            book = (m.order_book if m else None) or {}
+            mom = float(ind.get("momentum_5m_pct") or 0.0)
+            rsi = ind.get("rsi")
+            pressure = str(book.get("pressure") or "neutral")
+            cool = (
+                mom < 0.05
+                or pressure == "ask_heavy"
+                or (rsi is not None and float(rsi) >= 68)
+                or pnl_pct >= lock_tp
+            )
+            if not cool:
+                continue
+            out.append(
+                TradeDecision(
+                    action=ActionType.CLOSE,
+                    symbol=p.symbol,
+                    side=p.side,
+                    confidence=0.85,
+                    reasoning=(
+                        f"Zero-fee scalp TP: +{pnl_pct:.3f}% "
+                        f"(min={min_tp:.2f}%) mom5m={mom:.3f} "
+                        f"rsi={rsi} book={pressure}"
+                    ),
+                    take_profit_pct=round(pnl_pct, 3),
+                )
+            )
+        return out
 
     async def _maybe_daily_report(
         self,

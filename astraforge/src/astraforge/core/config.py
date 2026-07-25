@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     trading_style: Literal["swing", "momentum_scalp"] = "momentum_scalp"
     candle_timeframe: str = "5m"
     agent_loop_interval_sec: int = 30
+    # Kraken promo / zero-fee accounts: allow tiny take-profits
+    zero_fee_mode: bool = True
+    min_take_profit_pct: float = 0.12  # close even on small green if momentum fades
 
     # App
     database_path: str = "./data/astraforge.db"

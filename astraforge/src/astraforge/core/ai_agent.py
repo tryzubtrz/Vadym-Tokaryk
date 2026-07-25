@@ -31,17 +31,21 @@ logger = get_logger(__name__)
 SYSTEM_PROMPT = """You are AstraForge AI — a momentum scalping brain for crypto markets.
 
 Style: FREQUENT small trades. Many small wins > one big bet.
+IMPORTANT FEE MODE: {fee_mode}
+{fee_note}
+
 You READ 5-minute candles + order book across many coins and DECIDE yourself.
 
 How to trade:
-1. Scan for coins already moving UP over the last ~5 minutes (momentum_5m_pct > 0.15 and rising).
+1. Scan for coins already moving UP over the last ~5 minutes (momentum_5m_pct > 0.10 and rising).
 2. Confirm with order-book pressure (prefer bid_heavy) and RSI not extremely overbought (<78).
 3. BUY (open_long) with part of equity — aim size_pct_of_equity around {typical_size}-{max_position_pct}.
-4. While in a position: if momentum fades, RSI rolls over, or book flips ask_heavy → CLOSE/SELL near the top.
-5. Take quick profits (often +0.3% to +1.5%). Do NOT hold forever hoping for a moonshot.
+4. While in a position: if you have ANY small green profit and momentum cools, RSI rolls over, or book flips ask_heavy → CLOSE/SELL quickly.
+5. Take quick profits often ({tp_hint}). Do NOT hold forever hoping for a moonshot.
 6. Prefer several rotations per day over one giant swing.
 7. Spot mode: NO shorts. Only open_long / close / hold / reduce.
 8. If nothing is clearly moving — HOLD. Do not force garbage trades.
+9. If daily goal already reached → close open positions and protect profits.
 
 HARD RULES (enforced in code):
 1. Leverage max: {max_leverage}x
@@ -49,7 +53,6 @@ HARD RULES (enforced in code):
 3. Max open positions: {max_open_positions}
 4. Never violate daily loss / drawdown limits
 5. Confidence < 0.45 → HOLD
-6. If daily goal already reached → close/protect
 
 Respond with ONLY valid JSON:
 {{
@@ -152,18 +155,42 @@ class AIAgent:
         """Ask the LLM brain first; heuristic only if LLM is missing/fails."""
         max_pos = self.settings.effective_max_position_pct(account.equity)
         typical = max(8.0, min(max_pos, 20.0)) if self.settings.is_spot else min(max_pos, 3.0)
+        zero_fee = bool(getattr(self.settings, "zero_fee_mode", True))
+        min_tp = float(getattr(self.settings, "min_take_profit_pct", 0.12))
+        fee_mode = "ZERO / very low fees" if zero_fee else "normal fees"
+        fee_note = (
+            f"Fees are negligible. It is GOOD to close on tiny profits "
+            f"(even +{min_tp:.2f}% to +0.4%) when momentum cools. "
+            "Do not wait for large moves just to cover fees."
+            if zero_fee
+            else "Account for fees: prefer +0.4% to +1.5% targets before closing."
+        )
         system = SYSTEM_PROMPT.format(
             max_leverage=1.0 if self.settings.is_spot else risk_limits.get("max_leverage", self.settings.max_leverage),
             max_position_pct=max_pos,
             max_open_positions=self.settings.max_open_positions,
             typical_size=typical,
+            fee_mode=fee_mode,
+            fee_note=fee_note,
+            tp_hint=(
+                f"even +{min_tp:.2f}%…+0.5% is fine"
+                if zero_fee
+                else "often +0.4% to +1.5%"
+            ),
         )
         user_payload = self._build_context(account, markets, goal, risk_limits, pnl_today)
         user_payload["style"] = self.settings.trading_style
         user_payload["timeframe"] = self.settings.candle_timeframe
+        user_payload["zero_fee_mode"] = zero_fee
+        user_payload["min_take_profit_pct"] = min_tp
         user_payload["instruction"] = (
             "Scalp momentum: buy strength on 5m, sell when momentum fades. "
-            "Prefer frequent small trades. Spot: no shorts."
+            "Prefer frequent small trades. Spot: no shorts. "
+            + (
+                f"ZERO FEE: close winners quickly even at +{min_tp:.2f}%."
+                if zero_fee
+                else "Include fees in profit targets."
+            )
         )
 
         if not self.llm_configured:
@@ -352,12 +379,41 @@ class AIAgent:
             )
 
         if account.positions:
-            # Manage open: close if RSI extreme against position
+            # Manage open: tiny green (zero-fee) or RSI extreme against position
             decisions: list[TradeDecision] = []
+            zero_fee = bool(getattr(self.settings, "zero_fee_mode", True))
+            min_tp = float(getattr(self.settings, "min_take_profit_pct", 0.12))
             for p in account.positions:
                 m = next((x for x in markets if x.symbol == p.symbol), None)
-                rsi = (m.indicators or {}).get("rsi") if m else None
-                if rsi is not None:
+                ind = (m.indicators if m else None) or {}
+                book = (m.order_book if m else None) or {}
+                rsi = ind.get("rsi")
+                mom = float(ind.get("momentum_5m_pct") or 0.0)
+                pressure = str(book.get("pressure") or "neutral")
+                pnl_pct = 0.0
+                if p.entry_price > 0 and p.mark_price > 0:
+                    sign = 1.0 if p.side == Side.LONG else -1.0
+                    pnl_pct = ((p.mark_price - p.entry_price) / p.entry_price) * 100.0 * sign
+                if (
+                    zero_fee
+                    and p.side == Side.LONG
+                    and pnl_pct >= min_tp
+                    and (mom < 0.08 or pressure == "ask_heavy" or (rsi is not None and rsi >= 65))
+                ):
+                    decisions.append(
+                        TradeDecision(
+                            action=ActionType.CLOSE,
+                            symbol=p.symbol,
+                            side=p.side,
+                            confidence=0.75,
+                            reasoning=(
+                                f"Zero-fee tiny TP +{pnl_pct:.3f}% "
+                                f"mom5m={mom:.3f} rsi={rsi} book={pressure}"
+                            ),
+                            take_profit_pct=round(max(pnl_pct, min_tp), 3),
+                        )
+                    )
+                elif rsi is not None:
                     if p.side == Side.LONG and rsi > 75:
                         decisions.append(
                             TradeDecision(
@@ -382,7 +438,7 @@ class AIAgent:
                 return AgentDecisionBatch(
                     decisions=decisions,
                     goal_progress_note="Managing open risk",
-                    risk_note="Heuristic RSI exit",
+                    risk_note="Heuristic scalp / RSI exit",
                 )
 
         # Look for a single setup if we have a goal and room for positions
@@ -441,7 +497,11 @@ class AIAgent:
                                 f"rsi={best.indicators.get('rsi')}"
                             ),
                             stop_loss_pct=1.5,
-                            take_profit_pct=2.5,
+                            take_profit_pct=(
+                                0.35
+                                if getattr(self.settings, "zero_fee_mode", True)
+                                else 2.5
+                            ),
                         )
                     ],
                     goal_progress_note=f"pnl_today={pnl_today:.2f}",
