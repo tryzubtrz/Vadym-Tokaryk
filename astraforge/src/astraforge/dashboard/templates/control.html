@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>AstraForge Control</title>
+  <style>
+    :root {
+      --bg: #0a0f18;
+      --panel: #121a27;
+      --line: rgba(255,255,255,.08);
+      --text: #e8eef8;
+      --muted: #8fa3bf;
+      --ok: #3ecf8e;
+      --warn: #f0b429;
+      --bad: #ff6b6b;
+      --accent: #4da3ff;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 500px at 10% -20%, #1a3358 0%, transparent 55%),
+        radial-gradient(700px 400px at 100% 0%, #143d32 0%, transparent 45%),
+        var(--bg);
+      min-height: 100vh;
+      padding-bottom: 78px;
+    }
+    header {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(10,15,24,.85);
+      border-bottom: 1px solid var(--line);
+      padding: .9rem 1rem;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    header h1 { margin: 0; font-size: 1.1rem; letter-spacing: -.02em; }
+    .pill {
+      font-size: .75rem; padding: .25rem .55rem; border-radius: 999px;
+      border: 1px solid var(--line); color: var(--muted);
+    }
+    .pill.on { color: var(--ok); border-color: rgba(62,207,142,.35); }
+    .pill.off { color: var(--bad); border-color: rgba(255,107,107,.35); }
+    main { max-width: 920px; margin: 0 auto; padding: 1rem; }
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; }
+    @media (min-width: 720px) { .grid { grid-template-columns: repeat(4, 1fr); } }
+    .card {
+      background: rgba(18,26,39,.9);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: .9rem;
+    }
+    .card .label { color: var(--muted); font-size: .78rem; }
+    .card .value { font-size: 1.15rem; margin-top: .25rem; font-variant-numeric: tabular-nums; }
+    section { margin-top: 1rem; }
+    section h2 { font-size: .95rem; margin: 0 0 .6rem; color: var(--muted); font-weight: 600; }
+    .row { display: flex; flex-wrap: wrap; gap: .5rem; }
+    button, .btn {
+      appearance: none; border: 1px solid var(--line); background: #1a2435;
+      color: var(--text); border-radius: 12px; padding: .7rem .9rem; font-size: .9rem;
+      cursor: pointer;
+    }
+    button.primary { background: var(--accent); border-color: transparent; color: #041018; font-weight: 600; }
+    button.danger { background: rgba(255,107,107,.15); border-color: rgba(255,107,107,.35); color: #ffc9c9; }
+    button.ok { background: rgba(62,207,142,.15); border-color: rgba(62,207,142,.35); color: #baf5d7; }
+    button:disabled { opacity: .5; }
+    #chatBox {
+      height: 280px; overflow: auto; background: #0d1420; border-radius: 12px;
+      border: 1px solid var(--line); padding: .75rem; margin-bottom: .5rem;
+    }
+    .msg { margin: .45rem 0; max-width: 92%; padding: .55rem .7rem; border-radius: 12px; white-space: pre-wrap; line-height: 1.35; font-size: .9rem; }
+    .msg.user { background: #243552; margin-left: auto; }
+    .msg.bot { background: #162033; }
+    .composer { display: flex; gap: .5rem; }
+    .composer input, input, select, textarea {
+      width: 100%; background: #0d1420; border: 1px solid var(--line); color: var(--text);
+      border-radius: 12px; padding: .7rem .8rem; font-size: .95rem;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+    th, td { text-align: left; padding: .45rem .3rem; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); font-weight: 500; }
+    canvas { width: 100%; height: 180px; background: #0d1420; border-radius: 12px; border: 1px solid var(--line); }
+    nav.tabs {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+      display: grid; grid-template-columns: repeat(5, 1fr);
+      background: rgba(10,15,24,.95); border-top: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+    }
+    nav.tabs button {
+      border: 0; background: transparent; border-radius: 0; padding: .75rem .2rem;
+      font-size: .72rem; color: var(--muted);
+    }
+    nav.tabs button.active { color: var(--accent); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    #loginGate {
+      position: fixed; inset: 0; background: rgba(5,8,14,.92); z-index: 50;
+      display: grid; place-items: center; padding: 1rem;
+    }
+    #loginGate .box { width: min(380px, 100%); }
+    .muted { color: var(--muted); font-size: .85rem; }
+    .list { max-height: 320px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <div id="loginGate">
+    <div class="box card">
+      <h1 style="margin-top:0">AstraForge</h1>
+      <p class="muted">Вхід у пульт керування</p>
+      <input id="password" type="password" placeholder="Пароль (за замовч. astraforge)" />
+      <div style="height:.6rem"></div>
+      <button class="primary" style="width:100%" onclick="doLogin()">Увійти</button>
+      <p id="loginErr" class="muted"></p>
+    </div>
+  </div>
+
+  <header>
+    <h1>AstraForge</h1>
+    <span id="modePill" class="pill">—</span>
+  </header>
+
+  <main>
+    <div id="panel-home" class="panel active">
+      <div class="grid">
+        <div class="card"><div class="label">Equity</div><div class="value" id="mEquity">—</div></div>
+        <div class="card"><div class="label">PnL сьогодні</div><div class="value" id="mPnl">—</div></div>
+        <div class="card"><div class="label">Позиції</div><div class="value" id="mPos">—</div></div>
+        <div class="card"><div class="label">Ціль</div><div class="value" id="mGoal">—</div></div>
+      </div>
+      <section>
+        <h2>Керування</h2>
+        <div class="row">
+          <button class="ok" onclick="ctrl('resume')">▶ Старт</button>
+          <button onclick="ctrl('stop')">⏸ Стоп</button>
+          <button class="danger" onclick="ctrl('flatten')">💸 Продати все</button>
+          <button class="danger" onclick="ctrl('emergency')">🛑 Emergency</button>
+        </div>
+        <p id="ctrlMsg" class="muted"></p>
+      </section>
+      <section>
+        <h2>Зараз</h2>
+        <div class="card">
+          <div class="label">Останнє рішення AI</div>
+          <div id="lastDecision" style="margin-top:.4rem;line-height:1.4">—</div>
+          <div class="muted" id="breakerLine" style="margin-top:.5rem"></div>
+        </div>
+      </section>
+      <section>
+        <h2>Відкриті позиції</h2>
+        <div class="card list" id="posTable">—</div>
+      </section>
+    </div>
+
+    <div id="panel-charts" class="panel">
+      <section>
+        <h2>Свічки</h2>
+        <div class="row">
+          <select id="symSelect" onchange="loadCandles()"></select>
+          <select id="tfSelect" onchange="loadCandles()">
+            <option value="1m">1m</option>
+            <option value="5m" selected>5m</option>
+            <option value="15m">15m</option>
+            <option value="1h">1h</option>
+          </select>
+          <button onclick="loadCandles()">Оновити</button>
+        </div>
+        <div style="height:.6rem"></div>
+        <canvas id="chart" width="800" height="220"></canvas>
+      </section>
+      <section>
+        <h2>Equity curve</h2>
+        <canvas id="equityChart" width="800" height="180"></canvas>
+      </section>
+    </div>
+
+    <div id="panel-history" class="panel">
+      <section>
+        <h2>Угоди</h2>
+        <div class="card list"><table><thead><tr><th>Час</th><th>Дія</th><th>Пара</th><th>Size</th></tr></thead><tbody id="tradesBody"></tbody></table></div>
+      </section>
+      <section>
+        <h2>Рішення AI</h2>
+        <div class="card list" id="decisionsBox"></div>
+      </section>
+    </div>
+
+    <div id="panel-chat" class="panel">
+      <section>
+        <h2>Чат з AI</h2>
+        <div id="chatBox"></div>
+        <div class="composer">
+          <input id="chatInput" placeholder="Напиши AI: продай DOGE / що робити далі..." onkeydown="if(event.key==='Enter')sendChat()" />
+          <button class="primary" onclick="sendChat()">➤</button>
+        </div>
+        <p class="muted">Приклади: «продай все», «статус», «чому тримаєш LTC?», «працюй консервативніше»</p>
+      </section>
+    </div>
+
+    <div id="panel-settings" class="panel">
+      <section>
+        <h2>Біржа #1 (основна)</h2>
+        <div class="card">
+          <label class="label">Exchange</label>
+          <select id="sEx">
+            <option value="kraken">kraken (spot)</option>
+            <option value="kraken_futures">kraken_futures</option>
+            <option value="binance">binance</option>
+            <option value="bybit">bybit</option>
+          </select>
+          <div style="height:.5rem"></div>
+          <label class="label">API Key</label>
+          <input id="sKey" placeholder="залиши порожнім щоб не міняти" />
+          <div style="height:.5rem"></div>
+          <label class="label">API Secret</label>
+          <input id="sSecret" type="password" placeholder="залиши порожнім щоб не міняти" />
+        </div>
+      </section>
+      <section>
+        <h2>Біржа #2</h2>
+        <div class="card">
+          <select id="sEx2">
+            <option value="">— не задано —</option>
+            <option value="binance">binance</option>
+            <option value="bybit">bybit</option>
+            <option value="kraken">kraken</option>
+            <option value="kraken_futures">kraken_futures</option>
+          </select>
+          <div style="height:.5rem"></div>
+          <input id="sKey2" placeholder="API key біржі #2" />
+          <div style="height:.5rem"></div>
+          <input id="sSecret2" type="password" placeholder="API secret біржі #2" />
+          <p class="muted">Збережеться. Повне одночасне використання 2 бірж (арбітраж/копі) — наступний етап.</p>
+        </div>
+      </section>
+      <section>
+        <h2>Режим / стиль</h2>
+        <div class="card">
+          <label class="label">Trading mode</label>
+          <select id="sMode"><option value="paper">paper</option><option value="live">live</option></select>
+          <div style="height:.5rem"></div>
+          <label><input type="checkbox" id="sLiveConfirm" /> LIVE_CONFIRMED</label>
+          <div style="height:.5rem"></div>
+          <label class="label">Symbols (через кому)</label>
+          <textarea id="sSymbols" rows="3"></textarea>
+          <div style="height:.5rem"></div>
+          <label class="label">Style</label>
+          <select id="sStyle"><option value="momentum_scalp">momentum_scalp</option><option value="swing">swing</option></select>
+          <div style="height:.5rem"></div>
+          <label class="label">Timeframe</label>
+          <select id="sTf"><option>1m</option><option selected>5m</option><option>15m</option><option>1h</option></select>
+          <div style="height:.5rem"></div>
+          <label class="label">Max position %</label>
+          <input id="sPosPct" type="number" step="0.5" />
+        </div>
+      </section>
+      <section>
+        <h2>Ф’ючерси / Copytrading</h2>
+        <div class="card">
+          <label><input type="checkbox" id="sFutures" /> Futures enabled (прапор у налаштуваннях)</label>
+          <div style="height:.5rem"></div>
+          <label><input type="checkbox" id="sCopy" /> Copytrading enabled</label>
+          <div style="height:.5rem"></div>
+          <input id="sCopyLeader" placeholder="Leader / signal source id" />
+          <p class="muted">Прапорці зберігаються. Повний copy-engine підключимо наступним кроком.</p>
+        </div>
+      </section>
+      <section>
+        <button class="primary" style="width:100%" onclick="saveSettings()">💾 Зберегти налаштування</button>
+        <p id="setMsg" class="muted"></p>
+      </section>
+    </div>
+  </main>
+
+  <nav class="tabs">
+    <button class="active" data-tab="home" onclick="tab('home')">Статус</button>
+    <button data-tab="charts" onclick="tab('charts')">Свічки</button>
+    <button data-tab="history" onclick="tab('history')">Історія</button>
+    <button data-tab="chat" onclick="tab('chat')">AI чат</button>
+    <button data-tab="settings" onclick="tab('settings')">Налашт.</button>
+  </nav>
+
+<script>
+let TOKEN = localStorage.getItem('astra_token') || '';
+const $ = (id) => document.getElementById(id);
+
+async function api(path, opts={}) {
+  const headers = Object.assign({'Content-Type':'application/json'}, opts.headers||{});
+  if (TOKEN) headers['X-Astra-Token'] = TOKEN;
+  const r = await fetch(path, Object.assign({}, opts, {headers}));
+  if (r.status === 401) { showLogin(); throw new Error('auth'); }
+  const data = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+function showLogin(){ $('loginGate').style.display='grid'; }
+function hideLogin(){ $('loginGate').style.display='none'; }
+
+async function doLogin(){
+  try {
+    const data = await api('/api/login', {method:'POST', body: JSON.stringify({password: $('password').value})});
+    TOKEN = data.token; localStorage.setItem('astra_token', TOKEN);
+    hideLogin(); refreshAll();
+  } catch(e){ $('loginErr').textContent = 'Невірний пароль'; }
+}
+
+function tab(name){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+  $('panel-'+name).classList.add('active');
+  document.querySelector(`nav.tabs button[data-tab="${name}"]`).classList.add('active');
+  if(name==='charts'){ loadCandles(); loadEquity(); }
+  if(name==='history'){ loadHistory(); }
+  if(name==='chat'){ loadChat(); }
+  if(name==='settings'){ loadSettings(); }
+}
+
+async function refreshStatus(){
+  const s = await api('/api/status');
+  $('mEquity').textContent = '$' + Number(s.equity||0).toFixed(2);
+  const pnl = Number(s.pnl_today||0);
+  $('mPnl').textContent = (pnl>=0?'+':'') + '$' + pnl.toFixed(2);
+  $('mPnl').style.color = pnl>=0 ? 'var(--ok)' : 'var(--bad)';
+  $('mPos').textContent = s.open_positions ?? 0;
+  let goal='—';
+  if(s.current_goal){
+    goal = s.current_goal.target_profit_usd!=null ? ('$'+s.current_goal.target_profit_usd) : (s.current_goal.target_profit_pct!=null? (s.current_goal.target_profit_pct+'%') : '—');
+    goal += ` (${Math.round(s.goal_progress_pct||0)}%)`;
+  }
+  $('mGoal').textContent = goal;
+  $('lastDecision').textContent = s.last_decision_summary || '—';
+  const on = !!s.trading_enabled && !s.circuit_breaker_active;
+  $('modePill').textContent = `${s.mode||'?'} · ${s.exchange_id||''} · ${on?'ON':'OFF'}`;
+  $('modePill').className = 'pill ' + (on?'on':'off');
+  $('breakerLine').textContent = s.circuit_breaker_active ? ('Breaker: '+s.circuit_breaker_reason) : 'Breaker: ok';
+
+  const pos = await api('/api/positions');
+  if(!pos.positions || !pos.positions.length){ $('posTable').textContent='Немає відкритих позицій'; }
+  else {
+    $('posTable').innerHTML = '<table><thead><tr><th>Пара</th><th>Side</th><th>Size</th><th>Notional</th></tr></thead><tbody>' +
+      pos.positions.map(p=>`<tr><td>${p.symbol}</td><td>${p.side}</td><td>${Number(p.size).toFixed(6)}</td><td>$${Number(p.notional).toFixed(2)}</td></tr>`).join('') +
+      '</tbody></table>';
+  }
+  // symbols for chart
+  const syms = await api('/api/symbols');
+  const sel = $('symSelect');
+  const cur = sel.value;
+  sel.innerHTML = (syms.symbols||[]).map(s=>`<option value="${s}">${s}</option>`).join('');
+  if(cur) sel.value = cur;
+}
+
+async function ctrl(action){
+  $('ctrlMsg').textContent = '…';
+  try {
+    const r = await api('/api/control/'+action, {method:'POST', body:'{}'});
+    $('ctrlMsg').textContent = r.message || 'ok';
+    refreshStatus();
+  } catch(e){ $('ctrlMsg').textContent = String(e.message||e); }
+}
+
+async function sendChat(){
+  const input = $('chatInput');
+  const text = input.value.trim();
+  if(!text) return;
+  input.value='';
+  appendMsg('user', text);
+  try {
+    const r = await api('/api/chat', {method:'POST', body: JSON.stringify({message:text})});
+    appendMsg('bot', r.reply || '…');
+    refreshStatus();
+  } catch(e){ appendMsg('bot', 'Помилка: '+e.message); }
+}
+function appendMsg(role, text){
+  const d=document.createElement('div');
+  d.className='msg '+(role==='user'?'user':'bot');
+  d.textContent=text;
+  $('chatBox').appendChild(d);
+  $('chatBox').scrollTop = $('chatBox').scrollHeight;
+}
+async function loadChat(){
+  const r = await api('/api/chat/history');
+  $('chatBox').innerHTML='';
+  (r.history||[]).forEach(m=>appendMsg(m.role==='user'?'user':'bot', m.text));
+}
+
+async function loadHistory(){
+  const t = await api('/api/trades');
+  $('tradesBody').innerHTML = (t.trades||[]).map(x=>`<tr><td>${(x.created_at||'').toString().slice(11,19)}</td><td>${x.action}</td><td>${x.symbol}</td><td>${Number(x.size).toFixed(4)}</td></tr>`).join('');
+  const d = await api('/api/decisions');
+  $('decisionsBox').innerHTML = (d.decisions||[]).slice(0,15).map(x=>{
+    const s = x.reasoning || x.summary || JSON.stringify(x).slice(0,180);
+    return `<div style="padding:.4rem 0;border-bottom:1px solid var(--line)">${s}</div>`;
+  }).join('') || '—';
+}
+
+async function loadCandles(){
+  const symbol = $('symSelect').value; if(!symbol) return;
+  const tf = $('tfSelect').value;
+  const data = await api(`/api/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${tf}&limit=80`);
+  drawCandles($('chart'), data.candles||[]);
+}
+async function loadEquity(){
+  const data = await api('/api/equity');
+  drawLine($('equityChart'), (data.points||[]).map(p=>Number(p.equity)));
+}
+
+function drawCandles(canvas, candles){
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  if(!candles.length) return;
+  const highs = candles.map(c=>c.h), lows=candles.map(c=>c.l);
+  const min = Math.min(...lows), max=Math.max(...highs);
+  const span = (max-min)||1;
+  const bw = w / candles.length;
+  candles.forEach((c,i)=>{
+    const x = i*bw + bw*0.5;
+    const yH = h - ((c.h-min)/span)*(h-20)-10;
+    const yL = h - ((c.l-min)/span)*(h-20)-10;
+    const yO = h - ((c.o-min)/span)*(h-20)-10;
+    const yC = h - ((c.c-min)/span)*(h-20)-10;
+    const up = c.c >= c.o;
+    ctx.strokeStyle = up ? '#3ecf8e' : '#ff6b6b';
+    ctx.beginPath(); ctx.moveTo(x,yH); ctx.lineTo(x,yL); ctx.stroke();
+    ctx.fillStyle = up ? '#3ecf8e' : '#ff6b6b';
+    const top = Math.min(yO,yC), bot=Math.max(yO,yC);
+    ctx.fillRect(x-bw*0.3, top, bw*0.6, Math.max(1, bot-top));
+  });
+}
+function drawLine(canvas, values){
+  const ctx=canvas.getContext('2d'); const w=canvas.width,h=canvas.height;
+  ctx.clearRect(0,0,w,h);
+  if(values.length<2) return;
+  const min=Math.min(...values), max=Math.max(...values), span=(max-min)||1;
+  ctx.strokeStyle='#4da3ff'; ctx.lineWidth=2; ctx.beginPath();
+  values.forEach((v,i)=>{
+    const x=i/(values.length-1)*w;
+    const y=h-((v-min)/span)*(h-20)-10;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+}
+
+async function loadSettings(){
+  const s = await api('/api/settings');
+  $('sEx').value = s.exchange_id || 'kraken';
+  $('sMode').value = s.trading_mode || 'paper';
+  $('sLiveConfirm').checked = !!s.live_confirmed;
+  $('sSymbols').value = s.trade_symbols || '';
+  $('sStyle').value = s.trading_style || 'momentum_scalp';
+  $('sTf').value = s.candle_timeframe || '5m';
+  $('sPosPct').value = s.max_position_pct || 30;
+  $('sEx2').value = s.exchange2_id || '';
+  $('sFutures').checked = !!s.futures_enabled;
+  $('sCopy').checked = !!s.copytrading_enabled;
+  $('sCopyLeader').value = s.copytrading_leader || '';
+}
+async function saveSettings(){
+  const body = {
+    exchange_id: $('sEx').value,
+    trading_mode: $('sMode').value,
+    live_confirmed: $('sLiveConfirm').checked,
+    trade_symbols: $('sSymbols').value,
+    trading_style: $('sStyle').value,
+    candle_timeframe: $('sTf').value,
+    max_position_pct: Number($('sPosPct').value||30),
+    exchange2_id: $('sEx2').value || null,
+    futures_enabled: $('sFutures').checked,
+    copytrading_enabled: $('sCopy').checked,
+    copytrading_leader: $('sCopyLeader').value,
+  };
+  if($('sKey').value) body.exchange_api_key = $('sKey').value;
+  if($('sSecret').value) body.exchange_api_secret = $('sSecret').value;
+  if($('sKey2').value) body.exchange2_api_key = $('sKey2').value;
+  if($('sSecret2').value) body.exchange2_api_secret = $('sSecret2').value;
+  try {
+    await api('/api/settings', {method:'POST', body: JSON.stringify(body)});
+    $('setMsg').textContent = 'Збережено. Деякі зміни біржі потребують рестарту процесу.';
+    $('sKey').value=''; $('sSecret').value=''; $('sKey2').value=''; $('sSecret2').value='';
+  } catch(e){ $('setMsg').textContent = 'Помилка: '+e.message; }
+}
+
+async function refreshAll(){
+  try { await refreshStatus(); hideLogin(); }
+  catch(e){ if(String(e.message).includes('auth')) showLogin(); }
+}
+if(TOKEN){ hideLogin(); refreshAll(); } else { showLogin(); }
+setInterval(()=>{ if(TOKEN) refreshStatus().catch(()=>{}); }, 8000);
+</script>
+</body>
+</html>
