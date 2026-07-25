@@ -232,6 +232,21 @@
         <div class="brick"><div class="label">Crypto hold</div><div class="value" id="mCry">—</div></div>
       </div>
       <section>
+        <h2>Прибуток / збиток</h2>
+        <div class="lego cols-4">
+          <div class="brick"><div class="label">Валюта +</div><div class="value pnl-plus" id="fxProfit">—</div></div>
+          <div class="brick"><div class="label">Валюта −</div><div class="value pnl-minus" id="fxLoss">—</div></div>
+          <div class="brick"><div class="label">Крипта +</div><div class="value pnl-plus" id="cryProfit">—</div></div>
+          <div class="brick"><div class="label">Крипта −</div><div class="value pnl-minus" id="cryLoss">—</div></div>
+        </div>
+        <div class="lego cols-4" style="margin-top:.55rem">
+          <div class="brick"><div class="label">FX net (день)</div><div class="value" id="fxNetDay">—</div></div>
+          <div class="brick"><div class="label">Crypto net (день)</div><div class="value" id="cryNetDay">—</div></div>
+          <div class="brick"><div class="label">FX net (всього)</div><div class="value" id="fxNetAll">—</div></div>
+          <div class="brick"><div class="label">Crypto net (всього)</div><div class="value" id="cryNetAll">—</div></div>
+        </div>
+      </section>
+      <section>
         <h2>Керування</h2>
         <div class="row">
           <button class="ok" onclick="ctrl('resume')">▶ Старт</button>
@@ -483,6 +498,23 @@ async function refreshStatus(){
   const b = s.buckets||{};
   $('mFx').textContent = '$' + Number(b.fx_bucket_usd||0).toFixed(2);
   $('mCry').textContent = '$' + Number(b.crypto_hold_usd||0).toFixed(2);
+  const split = s.pnl_split || {};
+  const setMoney = (id, v, forceClass) => {
+    const n = Number(v||0);
+    $(id).textContent = money(n);
+    if (forceClass) $(id).className = 'value ' + forceClass;
+    else $(id).className = 'value ' + (n>=0?'pnl-plus':'pnl-minus');
+  };
+  setMoney('fxProfit', split.fx_profit_total ?? split.daily_fx_profit, 'pnl-plus');
+  $('fxLoss').textContent = '-$' + Number(split.fx_loss_total||0).toFixed(4);
+  $('fxLoss').className = 'value pnl-minus';
+  setMoney('cryProfit', split.crypto_profit_total ?? split.daily_crypto_profit, 'pnl-plus');
+  $('cryLoss').textContent = '-$' + Number(split.crypto_loss_total||0).toFixed(4);
+  $('cryLoss').className = 'value pnl-minus';
+  setMoney('fxNetDay', split.daily_fx_pnl);
+  setMoney('cryNetDay', split.daily_crypto_pnl);
+  setMoney('fxNetAll', split.fx_net_total);
+  setMoney('cryNetAll', split.crypto_net_total);
   $('modePill').textContent = `${s.mode||'—'} · ${s.exchange_id||''}`;
   $('modePill').className = 'pill ' + (s.trading_enabled ? 'on':'off');
   $('lastDecision').textContent = s.last_decision_summary || '—';

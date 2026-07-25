@@ -1,33 +1,14 @@
 {
   "fx_bucket_usd": 20.0,
-  "crypto_hold_usd": 6.5738,
+  "crypto_hold_usd": 6.5663,
   "crypto_hold_symbol": "",
   "crypto_hold_units": 0.0,
   "max_slots": 10,
   "target_slot_usd": 2.0,
-  "daily_profit_usd": 0.003349999999999742,
+  "daily_profit_usd": 0.0035036500000007486,
   "day_key": "2026-07-25",
-  "realized_fx_pnl_total": 0.003349999999999742,
-  "open_slots": [
-    {
-      "id": "4e9f9fe3",
-      "symbol": "EUR/USD",
-      "side": "long",
-      "amount": 4.39,
-      "entry": 1.1366749999999999,
-      "notional_usd": 5.0,
-      "pip": 0.0001,
-      "tp_min": 1.137875,
-      "emergency_stop": 1.0978,
-      "opened_at": "2026-07-25T07:30:45.756437+00:00",
-      "ai_reason": "Price is near the bottom of the range and spread is low.",
-      "convert": {
-        "ok": true,
-        "skipped": true,
-        "reason": "cad_float_budget_below_min"
-      }
-    }
-  ],
+  "realized_fx_pnl_total": 0.0035036500000007486,
+  "open_slots": [],
   "fx_pairs": [
     "USD/CAD",
     "EUR/CAD",
@@ -38,14 +19,26 @@
   "fx_target_usd": 20.0,
   "auto_split_equity": true,
   "auto_convert_fx": true,
+  "fx_instant_tp_pct": 0.04,
+  "max_hold_sec_green": 120,
+  "max_hold_sec_force_be": 300,
   "take_profit_pips_min": 4,
   "take_profit_pips_max": 8,
   "small_green_pips": 1,
-  "max_hold_sec_green": 120,
-  "max_hold_sec_force_be": 300,
   "range_lookback": 40,
   "buy_zone_pct": 0.3,
   "emergency_stop_mode": "yearly_low",
   "profit_to_crypto_pct": 0.1,
-  "updated_at": "2026-07-25T07:34:27.282644+00:00"
+  "realized_crypto_pnl_total": 0.0,
+  "fx_profit_total": 0.0035036500000007486,
+  "fx_loss_total": 0,
+  "crypto_profit_total": 0.0,
+  "crypto_loss_total": 0.0,
+  "daily_fx_pnl": 0.0035036500000007486,
+  "daily_crypto_pnl": 0.0,
+  "daily_fx_profit": 0.0035036500000007486,
+  "daily_fx_loss": 0.0,
+  "daily_crypto_profit": 0.0,
+  "daily_crypto_loss": 0.0,
+  "updated_at": "2026-07-25T07:40:09.601290+00:00"
 }

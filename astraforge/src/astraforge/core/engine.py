@@ -469,7 +469,9 @@ class TradingEngine:
                 # Size close against full live account (need real balances)
                 result = await self.executor.execute(decision, account)
                 if result.get("ok") and not result.get("rejected"):
-                    parts.append(f"CRYPTO close {decision.symbol}")
+                    pnl = float(result.get("pnl") or 0)
+                    self.buckets.record_crypto_profit(pnl)
+                    parts.append(f"CRYPTO close {decision.symbol} {pnl:+.4f}")
                     account = await self.exchange.get_account_snapshot(
                         peak_equity=float(await self.state.get_kv("peak_equity", 0) or 0)
                     )
@@ -525,6 +527,8 @@ class TradingEngine:
                 act = decision.action.value if hasattr(decision.action, "value") else str(decision.action)
                 if result.get("ok") and not result.get("rejected"):
                     parts.append(f"CRYPTO {act} {decision.symbol}")
+                    if decision.action in {ActionType.CLOSE, ActionType.REDUCE}:
+                        self.buckets.record_crypto_profit(float(result.get("pnl") or 0))
                     if decision.action == ActionType.OPEN_LONG:
                         # Shrink virtual crypto cash after fill
                         spent = float(result.get("amount") or 0) * float(result.get("price") or 0)

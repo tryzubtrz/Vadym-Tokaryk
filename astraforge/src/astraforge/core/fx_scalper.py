@@ -169,10 +169,13 @@ class FxMultiScalper:
             return {"action": "wait", "symbol": None, "reason": f"fallback_wait:{exc}"}
 
     async def manage_open_slots(self) -> list[dict[str, Any]]:
-        """Close on tiny green fast — prefer many small wins over long waits."""
+        """FX exits: >=0.04% close now; smaller green waits up to 2 minutes."""
         results: list[dict[str, Any]] = []
         slots = list(self.store.data.get("open_slots") or [])
         now = datetime.now(timezone.utc)
+        instant_tp = float(self.store.data.get("fx_instant_tp_pct") or 0.04)
+        max_hold_green = float(self.store.data.get("max_hold_sec_green") or 120)
+        max_hold_be = float(self.store.data.get("max_hold_sec_force_be") or 300)
         for slot in slots:
             symbol = slot["symbol"]
             entry = float(slot["entry"])
@@ -183,13 +186,9 @@ class FxMultiScalper:
             except Exception as exc:  # noqa: BLE001
                 results.append({"ok": False, "symbol": symbol, "error": str(exc)})
                 continue
-            if px <= 0:
+            if px <= 0 or entry <= 0:
                 continue
-            pip = float(slot.get("pip") or 0.0001)
-            pips = (px - entry) / pip if pip else 0.0
-            tp_pips = float(self.store.data.get("take_profit_pips_min") or 4)
-            small_pips = float(self.store.data.get("small_green_pips") or 1)
-            tp_min = entry + tp_pips * pip
+            pnl_pct = ((px - entry) / entry) * 100.0
             emergency = float(slot.get("emergency_stop") or 0)
             age_sec = 0.0
             try:
@@ -197,30 +196,25 @@ class FxMultiScalper:
                 age_sec = max(0.0, (now - opened).total_seconds())
             except Exception:  # noqa: BLE001
                 age_sec = 0.0
-            max_hold_green = float(self.store.data.get("max_hold_sec_green") or 120)
-            max_hold_be = float(self.store.data.get("max_hold_sec_force_be") or 300)
 
             action = None
             reason = ""
             if emergency and px <= emergency:
                 action = "emergency_stop"
                 reason = f"yearly-low emergency stop hit @ {px}"
-            elif px >= tp_min:
-                action = "take_profit"
-                reason = f"TP +{pips:.1f} pips (target {tp_pips:.0f})"
-            elif pips >= small_pips:
-                # Any small green — take it (user: better small than wait long)
-                action = "small_green"
-                reason = f"small green +{pips:.1f} pips — rotate"
-            elif age_sec >= max_hold_green and pips >= 0.3:
+            elif pnl_pct >= instant_tp:
+                # Priority: 0.04%+ → close immediately and rotate
+                action = "pct_tp"
+                reason = f"+{pnl_pct:.4f}% >= {instant_tp:.2f}% — close now"
+            elif age_sec >= max_hold_green and pnl_pct > 0:
+                # e.g. +0.03%: wait 2 minutes then take it
                 action = "time_green"
-                reason = f"held {age_sec/60:.0f}m with +{pips:.1f} pips — rotate"
+                reason = f"held {age_sec:.0f}s with +{pnl_pct:.4f}% (<{instant_tp:.2f}%) — rotate"
             elif age_sec >= max_hold_be and px >= entry:
                 action = "time_be"
-                reason = f"held {age_sec/60:.0f}m at/above entry — free capital"
+                reason = f"held {age_sec:.0f}s at/above entry — free capital"
             if not action:
                 continue
-            # Never sell normal red except emergency
             if action != "emergency_stop" and px < entry:
                 continue
             try:
@@ -230,6 +224,9 @@ class FxMultiScalper:
                 continue
             fill = float(order.get("average") or order.get("price") or px)
             realized = (fill - entry) * amount
+            # USD/CAD & EUR/CAD PnL is in CAD → convert to USD
+            if symbol.endswith("/CAD") and fill > 0:
+                realized = realized / fill
             self.store.remove_slot(slot["id"])
             self.store.record_fx_profit(realized)
             results.append(
@@ -238,11 +235,19 @@ class FxMultiScalper:
                     "action": action,
                     "symbol": symbol,
                     "pnl": realized,
+                    "pnl_pct": pnl_pct,
                     "reason": reason,
                     "order": order,
                 }
             )
-            logger.info("fx_slot_closed", symbol=symbol, action=action, pnl=realized, reason=reason)
+            logger.info(
+                "fx_slot_closed",
+                symbol=symbol,
+                action=action,
+                pnl=realized,
+                pnl_pct=pnl_pct,
+                reason=reason,
+            )
         return results
 
     async def maybe_open(self, available_usd: float | None = None) -> dict[str, Any] | None:

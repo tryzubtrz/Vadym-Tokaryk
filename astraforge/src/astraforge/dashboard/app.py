@@ -298,6 +298,7 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
                 "exchange_id": eng().settings.exchange_id,
                 "is_spot": eng().settings.is_spot,
                 "buckets": buckets,
+                "pnl_split": eng().buckets.pnl_breakdown(),
                 "fx_ai": getattr(eng(), "_last_fx_tick", {}).get("ai")
                 or getattr(eng().fx, "last_ai", {}),
             }
@@ -305,7 +306,12 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
 
     @app.get("/api/buckets")
     async def api_buckets(_: None = Depends(require_auth)) -> JSONResponse:
-        return JSONResponse({"buckets": eng().buckets.snapshot()})
+        return JSONResponse(
+            {
+                "buckets": eng().buckets.snapshot(),
+                "pnl_split": eng().buckets.pnl_breakdown(),
+            }
+        )
 
     @app.get("/api/fx/slots")
     async def api_fx_slots(_: None = Depends(require_auth)) -> JSONResponse:
@@ -325,6 +331,8 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
             order = await e.exchange.create_market_order(symbol, "sell", amount, reduce_only=True)
             fill = float(order.get("average") or order.get("price") or entry)
             pnl = (fill - entry) * amount
+            if symbol.endswith("/CAD") and fill > 0:
+                pnl = pnl / fill
             e.buckets.record_fx_profit(pnl)
             return JSONResponse({"ok": True, "pnl": pnl, "order": order, "slot": slot})
         except Exception as exc:  # noqa: BLE001

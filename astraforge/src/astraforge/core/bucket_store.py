@@ -44,15 +44,28 @@ class BucketStore:
             "fx_target_usd": 20.0,  # fixed FX allocation; rest of equity → crypto
             "auto_split_equity": True,
             "auto_convert_fx": True,
-            "take_profit_pips_min": 4,   # bank quick small greens
+            # FX exit: >= instant_tp_pct → close now; else any green waits max_hold_sec_green
+            "fx_instant_tp_pct": 0.04,
+            "max_hold_sec_green": 120,   # 2 min for sub-0.04% greens
+            "max_hold_sec_force_be": 300,
+            "take_profit_pips_min": 4,
             "take_profit_pips_max": 8,
-            "small_green_pips": 1,       # rotate from +1 pip
-            "max_hold_sec_green": 120,   # 2 min: any tiny green → close
-            "max_hold_sec_force_be": 300,  # 5 min: close at/above entry
+            "small_green_pips": 1,
             "range_lookback": 40,
-            "buy_zone_pct": 0.30,  # bottom 30% of range
+            "buy_zone_pct": 0.30,
             "emergency_stop_mode": "yearly_low",
-            "profit_to_crypto_pct": 0.10,  # of daily profit
+            "profit_to_crypto_pct": 0.10,
+            "realized_crypto_pnl_total": 0.0,
+            "fx_profit_total": 0.0,
+            "fx_loss_total": 0.0,
+            "crypto_profit_total": 0.0,
+            "crypto_loss_total": 0.0,
+            "daily_fx_pnl": 0.0,
+            "daily_crypto_pnl": 0.0,
+            "daily_fx_profit": 0.0,
+            "daily_fx_loss": 0.0,
+            "daily_crypto_profit": 0.0,
+            "daily_crypto_loss": 0.0,
             "updated_at": _utcnow(),
         }
 
@@ -92,12 +105,19 @@ class BucketStore:
                 )
             self.data["day_key"] = today
             self.data["daily_profit_usd"] = 0.0
+            self.data["daily_fx_pnl"] = 0.0
+            self.data["daily_crypto_pnl"] = 0.0
+            self.data["daily_fx_profit"] = 0.0
+            self.data["daily_fx_loss"] = 0.0
+            self.data["daily_crypto_profit"] = 0.0
+            self.data["daily_crypto_loss"] = 0.0
             self.save()
 
     def sync_to_equity(self, equity: float, *, fx_target: float | None = None) -> dict[str, Any]:
         """Keep FX at ~$20 (or fx_target), put the rest into crypto hold.
 
         With ~$26 equity → FX $20 + crypto ~$6. Never allocate more than cash.
+        Preserves PnL counters; only resizes working buckets.
         """
         eq = max(0.0, float(equity or 0))
         target = float(fx_target if fx_target is not None else (self.data.get("fx_target_usd") or 20.0))
@@ -110,7 +130,7 @@ class BucketStore:
         self.data["crypto_hold_usd"] = crypto
         self.data["auto_split_equity"] = True
         self.data["auto_convert_fx"] = True
-        # Keep multi-pair list (USD + CAD). Bot auto-converts cash as needed.
+        self.data["fx_instant_tp_pct"] = float(self.data.get("fx_instant_tp_pct") or 0.04)
         if not self.data.get("fx_pairs"):
             self.data["fx_pairs"] = [
                 "USD/CAD",
@@ -150,10 +170,50 @@ class BucketStore:
 
     def record_fx_profit(self, pnl: float) -> None:
         self.ensure_day()
+        pnl = float(pnl or 0)
         self.data["daily_profit_usd"] = float(self.data.get("daily_profit_usd") or 0) + pnl
-        self.data["realized_fx_pnl_total"] = (
-            float(self.data.get("realized_fx_pnl_total") or 0) + pnl
-        )
-        # Compound immediately into FX bucket for next sizing
+        self.data["daily_fx_pnl"] = float(self.data.get("daily_fx_pnl") or 0) + pnl
+        self.data["realized_fx_pnl_total"] = float(self.data.get("realized_fx_pnl_total") or 0) + pnl
+        if pnl >= 0:
+            self.data["fx_profit_total"] = float(self.data.get("fx_profit_total") or 0) + pnl
+            self.data["daily_fx_profit"] = float(self.data.get("daily_fx_profit") or 0) + pnl
+        else:
+            loss = abs(pnl)
+            self.data["fx_loss_total"] = float(self.data.get("fx_loss_total") or 0) + loss
+            self.data["daily_fx_loss"] = float(self.data.get("daily_fx_loss") or 0) + loss
         self.data["fx_bucket_usd"] = float(self.data.get("fx_bucket_usd") or 0) + pnl
         self.save()
+
+    def record_crypto_profit(self, pnl: float) -> None:
+        self.ensure_day()
+        pnl = float(pnl or 0)
+        self.data["daily_crypto_pnl"] = float(self.data.get("daily_crypto_pnl") or 0) + pnl
+        self.data["realized_crypto_pnl_total"] = (
+            float(self.data.get("realized_crypto_pnl_total") or 0) + pnl
+        )
+        if pnl >= 0:
+            self.data["crypto_profit_total"] = float(self.data.get("crypto_profit_total") or 0) + pnl
+            self.data["daily_crypto_profit"] = float(self.data.get("daily_crypto_profit") or 0) + pnl
+        else:
+            loss = abs(pnl)
+            self.data["crypto_loss_total"] = float(self.data.get("crypto_loss_total") or 0) + loss
+            self.data["daily_crypto_loss"] = float(self.data.get("daily_crypto_loss") or 0) + loss
+        self.data["crypto_hold_usd"] = float(self.data.get("crypto_hold_usd") or 0) + pnl
+        self.save()
+
+    def pnl_breakdown(self) -> dict[str, float]:
+        self.ensure_day()
+        return {
+            "fx_profit_total": float(self.data.get("fx_profit_total") or 0),
+            "fx_loss_total": float(self.data.get("fx_loss_total") or 0),
+            "fx_net_total": float(self.data.get("realized_fx_pnl_total") or 0),
+            "crypto_profit_total": float(self.data.get("crypto_profit_total") or 0),
+            "crypto_loss_total": float(self.data.get("crypto_loss_total") or 0),
+            "crypto_net_total": float(self.data.get("realized_crypto_pnl_total") or 0),
+            "daily_fx_profit": float(self.data.get("daily_fx_profit") or 0),
+            "daily_fx_loss": float(self.data.get("daily_fx_loss") or 0),
+            "daily_fx_pnl": float(self.data.get("daily_fx_pnl") or 0),
+            "daily_crypto_profit": float(self.data.get("daily_crypto_profit") or 0),
+            "daily_crypto_loss": float(self.data.get("daily_crypto_loss") or 0),
+            "daily_crypto_pnl": float(self.data.get("daily_crypto_pnl") or 0),
+        }
