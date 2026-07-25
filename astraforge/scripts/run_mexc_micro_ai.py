@@ -18,6 +18,7 @@ import ccxt.async_support as ccxt
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_PATH = ROOT / "data" / "mexc_micro_ai.json"
+REPORT_PATH = ROOT / "data" / "morning_report.md"
 DEFAULT_SYMBOL = "XRP/USDC:USDC"
 
 
@@ -60,6 +61,8 @@ def _default_state() -> dict[str, Any]:
         "stop_reason": "",
         "measured_taker_pct": 0.08,
         "last_signal": {},
+        "trade_log": [],
+        "night_started_at": _utcnow(),
         "updated_at": _utcnow(),
     }
 
@@ -83,12 +86,61 @@ def load_state() -> dict[str, Any]:
     base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.40), 0.30)
     base["min_score"] = min(max(float(base.get("min_score") or 0.48), 0.35), 0.70)
     base["cooldown_sec"] = min(max(float(base.get("cooldown_sec") or 600), 300), 3600)
+    if not isinstance(base.get("trade_log"), list):
+        base["trade_log"] = []
     return base
 
 
 def save_state(state: dict[str, Any]) -> None:
     state["updated_at"] = _utcnow()
     STATE_PATH.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    write_morning_report(state)
+
+
+def write_morning_report(state: dict[str, Any], extra: str = "") -> None:
+    """Ukrainian morning briefing (будок) updated overnight."""
+    bank = float(state.get("bankroll_usdc") or 5.0)
+    realized = float(state.get("realized_pnl_usdc") or 0.0)
+    left = bank + realized
+    open_pos = state.get("open")
+    sig = state.get("last_signal") or {}
+    lines = [
+        "# Ранковий будок (MEXC micro AI)",
+        "",
+        f"- Оновлено (UTC): `{_utcnow()}`",
+        f"- Старт ночі: `{state.get('night_started_at') or '—'}`",
+        f"- Символ: `{state.get('symbol')}`",
+        f"- Рукав: **{left:.2f} / {bank:.0f} USDC**",
+        f"- Realized PnL: **{realized:+.4f} USDC**",
+        f"- Угоди: **{state.get('trades', 0)}** | W/L: **{state.get('wins', 0)}/{state.get('losses', 0)}**",
+        f"- Stopped: `{state.get('stopped')}` {(state.get('stop_reason') or '')}".rstrip(),
+        f"- Відкрита позиція: {'так' if open_pos else 'ні'}",
+    ]
+    if open_pos:
+        lines.append(
+            f"  - entry={open_pos.get('entry')} contracts={open_pos.get('contracts')} "
+            f"score={open_pos.get('score')} since={open_pos.get('opened_at')}"
+        )
+    lines.extend(
+        [
+            f"- Останній score: `{sig.get('score')}` (поріг `{state.get('min_score')}`) "
+            f"rsi1={sig.get('rsi1')} rsi5={sig.get('rsi5')} range={sig.get('range_pos')}",
+            "",
+            "## Правила",
+            "- ~$1 / 1x / long-only / TP≥0.40% / SL−0.55% / стоп рукава −$5",
+            "",
+        ]
+    )
+    hist = state.get("trade_log") or []
+    if hist:
+        lines.append("## Угоди за ніч")
+        for row in hist[-30:]:
+            lines.append(f"- {row}")
+        lines.append("")
+    if extra:
+        lines.extend(["## Нотатка", extra, ""])
+    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    REPORT_PATH.write_text("\n".join(lines), encoding="utf-8")
 
 
 def _ema(vals: list[float], period: int) -> float | None:
@@ -423,6 +475,13 @@ class MexcMicroAI:
             self.state["wins"] = int(self.state.get("wins") or 0) + 1
         else:
             self.state["losses"] = int(self.state.get("losses") or 0) + 1
+        prev = self.state.get("open") or {}
+        log = list(self.state.get("trade_log") or [])
+        log.append(
+            f"{_utcnow()} {action} entry={prev.get('entry')} pnl={realized:+.4f} "
+            f"score={prev.get('score')} sleeve={self.sleeve_left():.2f}"
+        )
+        self.state["trade_log"] = log[-50:]
         self.state["open"] = None
         self.state["last_close_at"] = _utcnow()
         # stop after bankroll gone

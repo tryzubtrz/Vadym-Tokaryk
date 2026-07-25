@@ -22,23 +22,25 @@
   "measured_taker_pct": 0.08,
   "last_signal": {
     "ok": true,
-    "score": -0.111,
+    "score": 0.442,
     "side": null,
     "min_score": 0.48,
-    "px": 1.0891,
-    "range_pos": 0.521,
-    "rsi1": 84.6,
-    "rsi5": 80.7,
-    "mom1": 0.046,
-    "mom5": 0.138,
+    "px": 1.0879,
+    "range_pos": 0.394,
+    "rsi1": 54.8,
+    "rsi5": 62.1,
+    "mom1": -0.101,
+    "mom5": 0.028,
     "parts": {
-      "trend": 0.374,
-      "rsi5": -1.0,
-      "rsi1": -0.9,
-      "range": 0.0,
+      "trend": 0.325,
+      "rsi5": 0.0,
+      "rsi1": 0.55,
+      "range": 0.606,
       "mom5": 0.12,
-      "mom1": 0.08
+      "mom1": 0.0
     }
   },
-  "updated_at": "2026-07-25T10:16:35.652672+00:00"
+  "trade_log": [],
+  "night_started_at": "2026-07-25T10:23:49.809485+00:00",
+  "updated_at": "2026-07-25T10:24:00.893298+00:00"
 }
