@@ -197,8 +197,8 @@ class FxMultiScalper:
                 age_sec = max(0.0, (now - opened).total_seconds())
             except Exception:  # noqa: BLE001
                 age_sec = 0.0
-            max_hold_green = float(self.store.data.get("max_hold_sec_green") or 600)
-            max_hold_be = float(self.store.data.get("max_hold_sec_force_be") or 1800)
+            max_hold_green = float(self.store.data.get("max_hold_sec_green") or 120)
+            max_hold_be = float(self.store.data.get("max_hold_sec_force_be") or 300)
 
             action = None
             reason = ""

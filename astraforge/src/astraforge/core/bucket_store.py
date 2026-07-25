@@ -47,8 +47,8 @@ class BucketStore:
             "take_profit_pips_min": 4,   # bank quick small greens
             "take_profit_pips_max": 8,
             "small_green_pips": 1,       # rotate from +1 pip
-            "max_hold_sec_green": 600,   # 10 min: any tiny green → close
-            "max_hold_sec_force_be": 1800,  # 30 min: close at/above entry
+            "max_hold_sec_green": 120,   # 2 min: any tiny green → close
+            "max_hold_sec_force_be": 300,  # 5 min: close at/above entry
             "range_lookback": 40,
             "buy_zone_pct": 0.30,  # bottom 30% of range
             "emergency_stop_mode": "yearly_low",

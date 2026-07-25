@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     agent_loop_interval_sec: int = 30
     # Kraken promo / zero-fee accounts: allow tiny take-profits
     zero_fee_mode: bool = True
-    min_take_profit_pct: float = 0.05  # close tiny green fast — don't wait long
+    min_take_profit_pct: float = 0.04  # close tiny green fast — don't wait long
     # FX buckets
     fx_bucket_usd: float = 20.0
     crypto_bucket_usd: float = 8.0

@@ -557,8 +557,8 @@ class TradingEngine:
             return []
         if not account.positions:
             return []
-        min_tp = float(getattr(self.settings, "min_take_profit_pct", 0.05))
-        lock_tp = max(min_tp * 1.5, 0.10)  # bank quickly
+        min_tp = float(getattr(self.settings, "min_take_profit_pct", 0.04))
+        lock_tp = max(min_tp * 1.5, 0.08)  # bank quickly
         out: list[TradeDecision] = []
         for p in account.positions:
             if p.side != Side.LONG or p.entry_price <= 0 or p.mark_price <= 0:

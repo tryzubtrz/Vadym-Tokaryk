@@ -1,6 +1,6 @@
 {
   "fx_bucket_usd": 20.0,
-  "crypto_hold_usd": 6.5811,
+  "crypto_hold_usd": 6.5738,
   "crypto_hold_symbol": "",
   "crypto_hold_units": 0.0,
   "max_slots": 10,
@@ -41,11 +41,11 @@
   "take_profit_pips_min": 4,
   "take_profit_pips_max": 8,
   "small_green_pips": 1,
-  "max_hold_sec_green": 600,
-  "max_hold_sec_force_be": 1800,
+  "max_hold_sec_green": 120,
+  "max_hold_sec_force_be": 300,
   "range_lookback": 40,
   "buy_zone_pct": 0.3,
   "emergency_stop_mode": "yearly_low",
   "profit_to_crypto_pct": 0.1,
-  "updated_at": "2026-07-25T07:32:37.131238+00:00"
+  "updated_at": "2026-07-25T07:34:27.282644+00:00"
 }
