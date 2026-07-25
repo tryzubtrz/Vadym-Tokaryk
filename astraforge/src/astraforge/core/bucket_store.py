@@ -35,12 +35,15 @@ class BucketStore:
             "realized_fx_pnl_total": 0.0,
             "open_slots": [],  # list of slot dicts
             "fx_pairs": [
+                "USD/CAD",
+                "EUR/CAD",
                 "EUR/USD",
                 "GBP/USD",
                 "AUD/USD",
             ],
             "fx_target_usd": 20.0,  # fixed FX allocation; rest of equity → crypto
             "auto_split_equity": True,
+            "auto_convert_fx": True,
             "take_profit_pips_min": 12,
             "take_profit_pips_max": 18,
             "range_lookback": 40,
@@ -103,10 +106,16 @@ class BucketStore:
         self.data["fx_bucket_usd"] = round(fx, 4)
         self.data["crypto_hold_usd"] = crypto
         self.data["auto_split_equity"] = True
-        # Prefer USD-quoted FX pairs (account is USD). CAD pairs need CAD cash.
-        pairs = list(self.data.get("fx_pairs") or [])
-        if any(p.endswith("/CAD") or p.startswith("USD/") for p in pairs):
-            self.data["fx_pairs"] = ["EUR/USD", "GBP/USD", "AUD/USD"]
+        self.data["auto_convert_fx"] = True
+        # Keep multi-pair list (USD + CAD). Bot auto-converts cash as needed.
+        if not self.data.get("fx_pairs"):
+            self.data["fx_pairs"] = [
+                "USD/CAD",
+                "EUR/CAD",
+                "EUR/USD",
+                "GBP/USD",
+                "AUD/USD",
+            ]
         self.save()
         return {"fx_bucket_usd": fx, "crypto_hold_usd": crypto, "equity": eq}
 

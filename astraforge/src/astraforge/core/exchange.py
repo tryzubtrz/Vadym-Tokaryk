@@ -525,6 +525,147 @@ class ExchangeClient:
         except Exception as exc:  # noqa: BLE001
             logger.warning("set_leverage_failed", symbol=symbol, error=str(exc))
 
+    async def free_balance(self, asset: str) -> float:
+        """Free balance for a currency code (USD, CAD, EUR, …)."""
+        code = (asset or "").upper().replace("ZUSD", "USD")
+        if code == "ZUSD":
+            code = "USD"
+        bal = await self.fetch_balance_raw()
+        if not bal:
+            return 0.0
+        row = bal.get(code) or {}
+        try:
+            return float(
+                row.get("free")
+                or (bal.get("free") or {}).get(code)
+                or 0
+            )
+        except Exception:  # noqa: BLE001
+            return 0.0
+
+    async def ensure_currency(
+        self,
+        asset: str,
+        need_amount: float,
+        *,
+        max_spend_usd: float | None = None,
+    ) -> dict[str, Any]:
+        """Auto-convert from USD into ``asset`` until free balance covers need.
+
+        Examples:
+        - CAD via sell USD/CAD
+        - EUR via buy EUR/USD
+        - GBP via buy GBP/USD
+        - AUD via buy AUD/USD
+        """
+        asset = (asset or "").upper()
+        need_amount = float(need_amount or 0)
+        if need_amount <= 0:
+            return {"ok": True, "converted": False, "asset": asset, "have": 0.0}
+
+        have = await self.free_balance(asset)
+        if have + 1e-9 >= need_amount:
+            return {"ok": True, "converted": False, "asset": asset, "have": have}
+
+        short = need_amount - have
+        # Buffer for fees / slippage
+        short *= 1.02
+
+        if asset in {"USD", "USDT", "USDC"}:
+            return {
+                "ok": False,
+                "converted": False,
+                "asset": asset,
+                "have": have,
+                "error": "need_more_usd_cash",
+            }
+
+        order: dict[str, Any] | None = None
+        try:
+            if asset == "CAD":
+                # Sell USD → get CAD. Amount is USD base; CAD ≈ amount * USD/CAD price
+                t = await self.fetch_ticker("USD/CAD")
+                px = float(t.get("last") or t.get("ask") or 0)
+                if px <= 0:
+                    return {"ok": False, "error": "no_usdcad_price", "asset": asset}
+                usd_to_sell = short / px
+                if max_spend_usd is not None:
+                    usd_to_sell = min(usd_to_sell, float(max_spend_usd))
+                # Kraken min ~5 USD
+                market = (self._exchange.markets or {}).get("USD/CAD") if self._exchange else {}
+                min_amt = float(((market.get("limits") or {}).get("amount") or {}).get("min") or 5)
+                if usd_to_sell < min_amt:
+                    usd_to_sell = min_amt
+                if max_spend_usd is not None and usd_to_sell > float(max_spend_usd) + 1e-9:
+                    return {
+                        "ok": False,
+                        "error": f"cad_convert_needs_{usd_to_sell:.2f}_usd_budget_{max_spend_usd:.2f}",
+                        "asset": asset,
+                    }
+                free_usd = await self.free_balance("USD")
+                if usd_to_sell > free_usd * 0.98:
+                    usd_to_sell = free_usd * 0.98
+                if usd_to_sell < min_amt:
+                    return {
+                        "ok": False,
+                        "error": f"usd_too_low_for_cad_min_{free_usd:.2f}",
+                        "asset": asset,
+                    }
+                order = await self.create_market_order("USD/CAD", "sell", usd_to_sell)
+            elif asset in {"EUR", "GBP", "AUD"}:
+                sym = f"{asset}/USD"
+                t = await self.fetch_ticker(sym)
+                px = float(t.get("last") or t.get("ask") or 0)
+                if px <= 0:
+                    return {"ok": False, "error": f"no_{sym}_price", "asset": asset}
+                # Buy ``short`` units of asset, cost ≈ short * px USD
+                usd_cost = short * px
+                if max_spend_usd is not None and usd_cost > float(max_spend_usd):
+                    short = float(max_spend_usd) / px
+                    usd_cost = short * px
+                market = (self._exchange.markets or {}).get(sym) if self._exchange else {}
+                min_amt = float(((market.get("limits") or {}).get("amount") or {}).get("min") or 0)
+                if min_amt and short < min_amt:
+                    short = min_amt
+                    usd_cost = short * px
+                    if max_spend_usd is not None and usd_cost > float(max_spend_usd) + 1e-9:
+                        return {
+                            "ok": False,
+                            "error": f"{asset}_min_lot_costs_{usd_cost:.2f}_over_budget",
+                            "asset": asset,
+                        }
+                free_usd = await self.free_balance("USD")
+                if usd_cost > free_usd * 0.98:
+                    return {
+                        "ok": False,
+                        "error": f"need_{usd_cost:.2f}_usd_have_{free_usd:.2f}",
+                        "asset": asset,
+                    }
+                order = await self.create_market_order(sym, "buy", short)
+            else:
+                return {"ok": False, "error": f"unsupported_convert_{asset}", "asset": asset}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ensure_currency_failed", asset=asset, error=str(exc))
+            return {"ok": False, "error": str(exc), "asset": asset, "have": have}
+
+        have2 = await self.free_balance(asset)
+        logger.info(
+            "auto_converted",
+            asset=asset,
+            need=need_amount,
+            have_before=have,
+            have_after=have2,
+            order_id=(order or {}).get("id"),
+        )
+        return {
+            "ok": have2 + 1e-9 >= need_amount * 0.97,
+            "converted": True,
+            "asset": asset,
+            "have": have2,
+            "order": order,
+            "need": need_amount,
+        }
+
     async def create_market_order(
         self,
         symbol: str,
