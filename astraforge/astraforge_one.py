@@ -198,7 +198,9 @@ def load_config_interactive() -> Config:
                 cfg.telegram_user_ids = [int(uid)]
 
     if not cfg.llm_api_key:
-        llm = ask("LLM API key (Enter to skip — use built-in heuristic AI)")
+        print("⚠ For REAL AI brain (reads candles + order book) you NEED an LLM key.")
+        print("  Get one: https://platform.openai.com/api-keys  (or Anthropic / xAI)")
+        llm = ask("LLM API key (Enter = weak heuristic fallback, NOT real AI)")
         cfg.llm_api_key = llm
 
     if cfg.mode == "live" and not cfg.live_confirmed:
@@ -442,6 +444,19 @@ class Exchange:
             self.breaker.trip(f"OHLCV error: {e}")
             return []
 
+    async def order_book(self, symbol: str, limit: int = 20) -> dict:
+        """L2 book summary for the AI brain ('read the book')."""
+        if not self.markets_ok:
+            mid = 50_000.0 if "BTC" in symbol else 3_000.0
+            bids = [[mid - i * 5, 1.0 + i * 0.1] for i in range(1, 11)]
+            asks = [[mid + i * 5, 1.0 + i * 0.1] for i in range(1, 11)]
+            return _summarize_book({"bids": bids, "asks": asks})
+        try:
+            raw = await self.ex.fetch_order_book(symbol, limit=limit)
+            return _summarize_book(raw)
+        except Exception as e:  # noqa: BLE001
+            return {"error": str(e), "imbalance": 0.0, "pressure": "neutral"}
+
     async def ticker_price(self, symbol: str) -> float:
         if not self.markets_ok:
             return 50_000.0 if "BTC" in symbol else 3_000.0
@@ -599,6 +614,36 @@ class Exchange:
 # ============================= Indicators + AI =============================
 
 
+def _summarize_book(raw: dict, depth: int = 10) -> dict[str, Any]:
+    bids = (raw.get("bids") or [])[:depth]
+    asks = (raw.get("asks") or [])[:depth]
+    bid_vol = sum(float(x[1]) for x in bids) if bids else 0.0
+    ask_vol = sum(float(x[1]) for x in asks) if asks else 0.0
+    best_bid = float(bids[0][0]) if bids else 0.0
+    best_ask = float(asks[0][0]) if asks else 0.0
+    mid = (best_bid + best_ask) / 2 if best_bid and best_ask else 0.0
+    spread = (best_ask - best_bid) if best_bid and best_ask else 0.0
+    total = bid_vol + ask_vol
+    imbalance = ((bid_vol - ask_vol) / total) if total > 0 else 0.0
+    pressure = "neutral"
+    if imbalance > 0.15:
+        pressure = "bid_heavy"
+    elif imbalance < -0.15:
+        pressure = "ask_heavy"
+    return {
+        "best_bid": best_bid,
+        "best_ask": best_ask,
+        "mid": mid,
+        "spread": spread,
+        "bid_volume": round(bid_vol, 4),
+        "ask_volume": round(ask_vol, 4),
+        "imbalance": round(imbalance, 4),
+        "pressure": pressure,
+        "top_bids": [[float(p), float(s)] for p, s in bids[:5]],
+        "top_asks": [[float(p), float(s)] for p, s in asks[:5]],
+    }
+
+
 def indicators(ohlcv: list) -> dict[str, Any]:
     if not ohlcv or len(ohlcv) < 30:
         return {"error": "few_candles"}
@@ -630,7 +675,10 @@ async def llm_decide(cfg: Config, context: dict) -> list[Decision] | None:
     if not cfg.llm_api_key or httpx is None:
         return None
     system = (
-        "You are AstraForge. Return ONLY JSON: "
+        "You are AstraForge AI trading brain for crypto perpetual futures. "
+        "You READ candles + order_book (the book: bids/asks/imbalance/pressure) and DECIDE yourself. "
+        "You are not a fixed rule script. Cite candle + book signals in reasoning. "
+        "Return ONLY JSON: "
         '{"decisions":[{"action":"open_long|open_short|close|hold","symbol":"...|null",'
         '"size_pct_of_equity":0-4,"leverage":1-5,"confidence":0-1,"reasoning":"..."}]}'
         f" Hard limits: lev≤{HARD_MAX_LEVERAGE}, size≤{HARD_MAX_POSITION_PCT}%. Prefer HOLD if unsure."
@@ -999,7 +1047,22 @@ class Engine:
         markets: dict[str, dict] = {}
         for sym in SYMBOLS:
             ohlcv = await self.ex.ohlcv(sym)
-            markets[sym] = indicators(ohlcv)
+            book = await self.ex.order_book(sym)
+            recent = [
+                {
+                    "o": float(r[1]),
+                    "h": float(r[2]),
+                    "l": float(r[3]),
+                    "c": float(r[4]),
+                    "v": float(r[5]),
+                }
+                for r in ohlcv[-8:]
+            ]
+            markets[sym] = {
+                "indicators": indicators(ohlcv),
+                "order_book": book,
+                "recent_candles": recent,
+            }
 
         context = {
             "equity": equity,
@@ -1008,11 +1071,14 @@ class Engine:
             "positions": [p.__dict__ for p in acc["positions"]],
             "markets": markets,
             "limits": self.risk.limits,
+            "instruction": "Read candles + order_book. Decide like a trader. Cite both.",
         }
         decisions = await llm_decide(self.cfg, context)
         if decisions is None:
+            # Heuristic sees indicators only
+            ind_only = {s: m.get("indicators", m) for s, m in markets.items()}
             decisions = heuristic_decide(
-                markets, acc["positions"], self.goal, pnl, len(acc["positions"])
+                ind_only, acc["positions"], self.goal, pnl, len(acc["positions"])
             )
 
         results = []

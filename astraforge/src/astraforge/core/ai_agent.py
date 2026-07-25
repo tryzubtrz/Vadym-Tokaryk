@@ -28,19 +28,28 @@ from astraforge.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-SYSTEM_PROMPT = """You are AstraForge AI, an autonomous crypto perpetual futures trading agent.
+SYSTEM_PROMPT = """You are AstraForge AI — a real trading brain for crypto perpetual futures.
 
-You MUST obey these HARD RULES (enforced in code; violating them wastes the turn):
-1. Max leverage per position: {max_leverage}x
-2. Max position size: {max_position_pct}% of equity (margin basis)
+You are NOT a fixed rule script. You READ the market data and DECIDE yourself:
+- Candles (OHLCV + indicators + recent bars)
+- Order book / "the book" (bids, asks, imbalance, walls, spread, pressure)
+- Open positions, equity, and the user's profit goal
+
+Think like a discretionary trader:
+1. Read trend + momentum from candles
+2. Confirm or fade using order-book pressure (bid_heavy / ask_heavy, walls)
+3. Choose open_long / open_short / close / reduce / hold
+4. Explain WHY in reasoning (mention candle + book signals)
+
+HARD RULES (enforced outside you — do not violate):
+1. Max leverage: {max_leverage}x
+2. Max position size: {max_position_pct}% of equity
 3. Max open positions: {max_open_positions}
-4. Never chase a daily profit goal by increasing risk beyond limits
-5. Prefer HOLD when confidence < 0.45 or market is unclear
-6. Prefer reducing / closing losers near stop conditions
+4. Never blow risk limits to chase the daily goal
+5. Prefer HOLD when confidence < 0.45 or book+candles disagree
+6. Protect profits when the goal is already reached
 
-Your job: help reach the user's daily profit goal WITHOUT violating risk rules.
-
-Respond with ONLY valid JSON matching this schema:
+Respond with ONLY valid JSON:
 {{
   "decisions": [
     {{
@@ -50,7 +59,7 @@ Respond with ONLY valid JSON matching this schema:
       "size_pct_of_equity": 0.0-{max_position_pct},
       "leverage": 1.0-{max_leverage},
       "confidence": 0.0-1.0,
-      "reasoning": "short explanation",
+      "reasoning": "short explanation citing candles + order book",
       "stop_loss_pct": number or null,
       "take_profit_pct": number or null
     }}
@@ -60,7 +69,6 @@ Respond with ONLY valid JSON matching this schema:
 }}
 
 Do not invent symbols outside the provided universe.
-If goal is already reached, prefer close/hold and protect profits.
 Output JSON only — no markdown fences.
 """
 
@@ -81,7 +89,7 @@ class AIAgent:
         exchange: Any,
         symbols: list[str] | None = None,
     ) -> list[MarketSnapshot]:
-        """Fetch OHLCV and compute indicators for the trade universe."""
+        """Fetch candles + order book for the trade universe (AI brain input)."""
         symbols = symbols or self.settings.symbols
         snapshots: list[MarketSnapshot] = []
         for symbol in symbols:
@@ -90,8 +98,33 @@ class AIAgent:
                 continue
             df = ohlcv_to_dataframe(ohlcv)
             indicators = compute_indicators(df)
-            snapshots.append(MarketSnapshot(symbol=symbol, indicators=indicators))
+            book = await exchange.fetch_order_book(symbol, limit=20)
+            recent = []
+            for row in ohlcv[-8:]:
+                recent.append(
+                    {
+                        "o": float(row[1]),
+                        "h": float(row[2]),
+                        "l": float(row[3]),
+                        "c": float(row[4]),
+                        "v": float(row[5]),
+                    }
+                )
+            snapshots.append(
+                MarketSnapshot(
+                    symbol=symbol,
+                    indicators=indicators,
+                    order_book=book,
+                    recent_candles=recent,
+                )
+            )
         return snapshots
+
+    @property
+    def llm_configured(self) -> bool:
+        if self.settings.llm_provider == "ollama":
+            return True
+        return bool(self.settings.llm_api_key)
 
     async def decide(
         self,
@@ -102,7 +135,7 @@ class AIAgent:
         risk_limits: dict[str, float],
         pnl_today: float,
     ) -> AgentDecisionBatch:
-        """Ask LLM for a decision batch; fall back to heuristic on failure."""
+        """Ask the LLM brain first; heuristic only if LLM is missing/fails."""
         system = SYSTEM_PROMPT.format(
             max_leverage=risk_limits.get("max_leverage", self.settings.max_leverage),
             max_position_pct=risk_limits.get(
@@ -112,10 +145,18 @@ class AIAgent:
         )
         user_payload = self._build_context(account, markets, goal, risk_limits, pnl_today)
 
+        if not self.llm_configured:
+            logger.warning("llm_not_configured_using_heuristic")
+            batch = self._heuristic_decide(account, markets, goal, pnl_today, risk_limits)
+            self._last_reasoning = (
+                f"[no LLM key — heuristic] {self._summarize(batch)}"
+            )
+            return batch
+
         try:
             raw = await self._call_llm(system, json.dumps(user_payload, ensure_ascii=False))
             batch = self._parse_batch(raw)
-            self._last_reasoning = self._summarize(batch)
+            self._last_reasoning = f"[AI brain] {self._summarize(batch)}"
             return batch
         except Exception as exc:  # noqa: BLE001
             logger.warning("llm_decide_failed", error=str(exc))
@@ -162,9 +203,19 @@ class AIAgent:
             "goal_progress_pct": round(progress, 2),
             "risk_limits": risk_limits,
             "markets": [
-                {"symbol": m.symbol, "indicators": m.indicators} for m in markets
+                {
+                    "symbol": m.symbol,
+                    "indicators": m.indicators,
+                    "order_book": m.order_book,
+                    "recent_candles": m.recent_candles,
+                }
+                for m in markets
             ],
             "universe": self.settings.symbols,
+            "instruction": (
+                "Read candles + order_book for each symbol. "
+                "Decide like a trader. Cite both in reasoning."
+            ),
         }
 
     async def _call_llm(self, system: str, user: str) -> str:

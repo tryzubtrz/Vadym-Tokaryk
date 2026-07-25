@@ -19,6 +19,53 @@ from astraforge.utils.logging import get_logger
 logger = get_logger(__name__)
 
 
+def summarize_order_book(raw: dict[str, Any], depth: int = 10) -> dict[str, Any]:
+    """Compress an L2 book into signals an LLM can reason about."""
+    bids = (raw.get("bids") or [])[:depth]
+    asks = (raw.get("asks") or [])[:depth]
+    bid_vol = sum(float(x[1]) for x in bids) if bids else 0.0
+    ask_vol = sum(float(x[1]) for x in asks) if asks else 0.0
+    best_bid = float(bids[0][0]) if bids else 0.0
+    best_ask = float(asks[0][0]) if asks else 0.0
+    mid = (best_bid + best_ask) / 2 if best_bid and best_ask else 0.0
+    spread = (best_ask - best_bid) if best_bid and best_ask else 0.0
+    spread_bps = (spread / mid * 10_000) if mid else 0.0
+    total = bid_vol + ask_vol
+    imbalance = ((bid_vol - ask_vol) / total) if total > 0 else 0.0
+    # Simple wall detection: largest level vs average
+    def _wall(levels: list) -> dict[str, float] | None:
+        if not levels:
+            return None
+        sizes = [float(x[1]) for x in levels]
+        avg = sum(sizes) / len(sizes)
+        idx = max(range(len(sizes)), key=lambda i: sizes[i])
+        if sizes[idx] >= avg * 2.5:
+            return {"price": float(levels[idx][0]), "size": sizes[idx]}
+        return None
+
+    pressure = "neutral"
+    if imbalance > 0.15:
+        pressure = "bid_heavy"
+    elif imbalance < -0.15:
+        pressure = "ask_heavy"
+
+    return {
+        "best_bid": best_bid,
+        "best_ask": best_ask,
+        "mid": mid,
+        "spread": spread,
+        "spread_bps": round(spread_bps, 2),
+        "bid_volume": round(bid_vol, 4),
+        "ask_volume": round(ask_vol, 4),
+        "imbalance": round(imbalance, 4),  # + = more bids (buy pressure)
+        "pressure": pressure,
+        "bid_wall": _wall(bids),
+        "ask_wall": _wall(asks),
+        "top_bids": [[float(p), float(s)] for p, s in bids[:5]],
+        "top_asks": [[float(p), float(s)] for p, s in asks[:5]],
+    }
+
+
 class ExchangeClient:
     """Thin async wrapper around CCXT with paper-mode simulation fallback."""
 
@@ -119,6 +166,25 @@ class ExchangeClient:
             logger.warning("fetch_ticker_failed", symbol=symbol, error=str(exc))
             await self.breaker.trip(BreakerReason.API_ERROR, detail=f"ticker {symbol}: {exc}")
             return {"symbol": symbol, "last": 0.0}
+
+    async def fetch_order_book(self, symbol: str, limit: int = 20) -> dict[str, Any]:
+        """Fetch L2 order book and return a compact summary for the LLM brain."""
+        if not self._exchange or not self._markets_loaded:
+            return self._synthetic_order_book()
+        try:
+            raw = await self._exchange.fetch_order_book(symbol, limit=limit)
+            return summarize_order_book(raw)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("fetch_order_book_failed", symbol=symbol, error=str(exc))
+            # Order book failure should not always halt trading — return empty summary
+            return {"error": str(exc), "imbalance": 0.0}
+
+    @staticmethod
+    def _synthetic_order_book() -> dict[str, Any]:
+        mid = 50_000.0
+        bids = [[mid - i * 5, 1.0 + i * 0.1] for i in range(1, 11)]
+        asks = [[mid + i * 5, 1.0 + i * 0.1] for i in range(1, 11)]
+        return summarize_order_book({"bids": bids, "asks": asks})
 
     async def fetch_balance_raw(self) -> dict[str, Any]:
         if not self._exchange:

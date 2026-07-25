@@ -91,6 +91,8 @@ class AccountSnapshot(BaseModel):
 class MarketSnapshot(BaseModel):
     symbol: str
     indicators: dict[str, Any] = Field(default_factory=dict)
+    order_book: dict[str, Any] = Field(default_factory=dict)
+    recent_candles: list[dict[str, float]] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=_utcnow)
 
 
