@@ -326,21 +326,84 @@ class AIAgent:
             if text.startswith("json"):
                 text = text[4:].strip()
         data = json.loads(text)
+        # Always soft-coerce — LLMs often send CLOSE/SELL/aliases
+        decisions: list[TradeDecision] = []
+        for item in data.get("decisions", []) or []:
+            coerced = self._coerce_decision(item)
+            if coerced is None:
+                continue
+            decisions.append(coerced)
+        if not decisions:
+            # Fallback: try strict whole-batch parse
+            try:
+                return AgentDecisionBatch.model_validate(data)
+            except ValidationError:
+                pass
+        return AgentDecisionBatch(
+            decisions=decisions
+            or [
+                TradeDecision(
+                    action=ActionType.HOLD,
+                    confidence=0.4,
+                    reasoning="No valid decisions parsed — holding",
+                )
+            ],
+            goal_progress_note=str(data.get("goal_progress_note", "")),
+            risk_note=str(data.get("risk_note", "")),
+        )
+
+    def _coerce_decision(self, item: Any) -> TradeDecision | None:
+        if not isinstance(item, dict):
+            return None
+        raw = dict(item)
+        action = str(raw.get("action") or "hold").strip().lower()
+        aliases = {
+            "buy": "open_long",
+            "long": "open_long",
+            "open": "open_long",
+            "enter_long": "open_long",
+            "sell": "close",
+            "exit": "close",
+            "close_long": "close",
+            "flat": "close",
+            "take_profit": "close",
+            "tp": "close",
+            "short": "open_short",
+            "open_short": "open_short",
+            "sell_short": "open_short",
+        }
+        action = aliases.get(action, action)
+        if action not in {a.value for a in ActionType}:
+            logger.debug("skip_unknown_action", action=action)
+            return None
+        raw["action"] = action
+        if raw.get("side"):
+            side = str(raw["side"]).strip().lower()
+            if side in {"buy", "long"}:
+                raw["side"] = "long"
+            elif side in {"sell", "short"}:
+                raw["side"] = "short"
+        # Spot: never open shorts
+        if self.settings.is_spot and action == "open_short":
+            return None
+        # Clamp tiny TPs for zero-fee mode
+        for key in ("take_profit_pct", "stop_loss_pct"):
+            if raw.get(key) is None:
+                continue
+            try:
+                val = float(raw[key])
+            except (TypeError, ValueError):
+                raw[key] = None
+                continue
+            if key == "take_profit_pct" and 0 < val < 0.05:
+                raw[key] = 0.05
+            if key == "stop_loss_pct" and 0 < val < 0.1:
+                raw[key] = 0.1
         try:
-            return AgentDecisionBatch.model_validate(data)
-        except ValidationError:
-            # Soft coerce decisions list
-            decisions = []
-            for item in data.get("decisions", []):
-                try:
-                    decisions.append(TradeDecision.model_validate(item))
-                except ValidationError as ve:
-                    logger.debug("skip_invalid_decision", error=str(ve))
-            return AgentDecisionBatch(
-                decisions=decisions,
-                goal_progress_note=str(data.get("goal_progress_note", "")),
-                risk_note=str(data.get("risk_note", "")),
-            )
+            return TradeDecision.model_validate(raw)
+        except ValidationError as ve:
+            logger.warning("skip_invalid_decision", error=str(ve), item=raw)
+            return None
 
     def _heuristic_decide(
         self,
