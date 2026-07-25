@@ -80,6 +80,40 @@ async def require_auth(
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+def _enrich_trade(t: dict[str, Any]) -> dict[str, Any]:
+    """Add result bucket (plus/minus/flat/open) and display helpers."""
+    action = str(t.get("action") or "").lower()
+    pnl = float(t.get("pnl") or 0.0)
+    size = float(t.get("size") or 0.0)
+    price = float(t.get("price") or 0.0)
+    is_open = action.startswith("open") or action in {"buy"}
+    is_close = action in {"close", "reduce", "close_all", "sell"}
+    if is_open:
+        result = "open"
+        result_label = "Відкриття"
+    elif is_close:
+        if pnl > 1e-7:
+            result = "plus"
+            result_label = "У плюс"
+        elif pnl < -1e-7:
+            result = "minus"
+            result_label = "У мінус"
+        else:
+            result = "flat"
+            result_label = "Без змін"
+    else:
+        result = "other"
+        result_label = action or "—"
+
+    out = dict(t)
+    out["result"] = result
+    out["result_label"] = result_label
+    out["notional"] = round(abs(size * price), 6)
+    out["pnl"] = pnl
+    out["pnl_abs"] = abs(pnl)
+    return out
+
+
 def create_app(engine: TradingEngine | None = None) -> FastAPI:
     app = FastAPI(title="AstraForge Control Center", version="2.0.0")
     app.state.engine = engine
@@ -138,9 +172,36 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
         )
 
     @app.get("/api/trades")
-    async def api_trades(_: None = Depends(require_auth)) -> JSONResponse:
-        trades = await eng().state.recent_trades(100)
-        return JSONResponse({"trades": [t.model_dump(mode="json") for t in trades]})
+    async def api_trades(
+        result: str = "all",
+        limit: int = 300,
+        _: None = Depends(require_auth),
+    ) -> JSONResponse:
+        """Trade history with +/- classification for the Control Center UI."""
+        raw = await eng().state.list_trades(limit=max(1, min(int(limit), 1000)))
+        items = [_enrich_trade(t.model_dump(mode="json")) for t in raw]
+        # Keep legacy ?filter= alias from older UI builds
+        f = (result or "all").lower().strip()
+        if f in {"plus", "win", "green", "+"}:
+            items = [x for x in items if x["result"] == "plus"]
+        elif f in {"minus", "loss", "red", "-"}:
+            items = [x for x in items if x["result"] == "minus"]
+        elif f in {"open", "opens"}:
+            items = [x for x in items if x["result"] == "open"]
+        elif f in {"closed", "close"}:
+            items = [x for x in items if x["result"] in {"plus", "minus", "flat"}]
+        stats = await eng().state.trade_stats()
+        return JSONResponse({"trades": items, "stats": stats, "filter": f})
+
+    @app.get("/api/trades/{trade_id}")
+    async def api_trade_detail(
+        trade_id: int,
+        _: None = Depends(require_auth),
+    ) -> JSONResponse:
+        t = await eng().state.get_trade(trade_id)
+        if t is None:
+            raise HTTPException(status_code=404, detail="trade_not_found")
+        return JSONResponse({"trade": _enrich_trade(t.model_dump(mode="json"))})
 
     @app.get("/api/decisions")
     async def api_decisions(_: None = Depends(require_auth)) -> JSONResponse:

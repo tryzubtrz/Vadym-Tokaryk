@@ -168,8 +168,12 @@ class StateManager:
         return int(cur.lastrowid or 0)
 
     async def recent_trades(self, limit: int = 50) -> list[TradeRecord]:
+        return await self.list_trades(limit=limit)
+
+    async def list_trades(self, limit: int = 500, offset: int = 0) -> list[TradeRecord]:
         cur = await self.db.execute(
-            "SELECT * FROM trades ORDER BY id DESC LIMIT ?", (limit,)
+            "SELECT * FROM trades ORDER BY id DESC LIMIT ? OFFSET ?",
+            (max(1, int(limit)), max(0, int(offset))),
         )
         rows = await cur.fetchall()
         result: list[TradeRecord] = []
@@ -190,6 +194,53 @@ class StateManager:
                 )
             )
         return result
+
+    async def get_trade(self, trade_id: int) -> TradeRecord | None:
+        cur = await self.db.execute("SELECT * FROM trades WHERE id = ?", (int(trade_id),))
+        r = await cur.fetchone()
+        if not r:
+            return None
+        return TradeRecord(
+            id=r["id"],
+            symbol=r["symbol"],
+            side=r["side"],
+            action=r["action"],
+            size=r["size"],
+            price=r["price"],
+            leverage=r["leverage"],
+            pnl=r["pnl"],
+            reasoning=r["reasoning"] or "",
+            mode=r["mode"],
+            created_at=datetime.fromisoformat(r["created_at"]),
+        )
+
+    async def trade_stats(self) -> dict[str, Any]:
+        """Aggregate closed-trade PnL for the history UI."""
+        cur = await self.db.execute(
+            """
+            SELECT
+              COUNT(*) AS total,
+              SUM(CASE WHEN lower(action) IN ('close','reduce','close_all') AND pnl > 0.0000001 THEN 1 ELSE 0 END) AS wins,
+              SUM(CASE WHEN lower(action) IN ('close','reduce','close_all') AND pnl < -0.0000001 THEN 1 ELSE 0 END) AS losses,
+              SUM(CASE WHEN lower(action) IN ('close','reduce','close_all') AND abs(pnl) <= 0.0000001 THEN 1 ELSE 0 END) AS flats,
+              SUM(CASE WHEN lower(action) LIKE 'open%' THEN 1 ELSE 0 END) AS opens,
+              COALESCE(SUM(CASE WHEN lower(action) IN ('close','reduce','close_all') AND pnl > 0 THEN pnl ELSE 0 END), 0) AS gross_profit,
+              COALESCE(SUM(CASE WHEN lower(action) IN ('close','reduce','close_all') AND pnl < 0 THEN pnl ELSE 0 END), 0) AS gross_loss,
+              COALESCE(SUM(CASE WHEN lower(action) IN ('close','reduce','close_all') THEN pnl ELSE 0 END), 0) AS net_pnl
+            FROM trades
+            """
+        )
+        r = await cur.fetchone()
+        return {
+            "total": int(r["total"] or 0),
+            "wins": int(r["wins"] or 0),
+            "losses": int(r["losses"] or 0),
+            "flats": int(r["flats"] or 0),
+            "opens": int(r["opens"] or 0),
+            "gross_profit": float(r["gross_profit"] or 0),
+            "gross_loss": float(r["gross_loss"] or 0),
+            "net_pnl": float(r["net_pnl"] or 0),
+        }
 
     # --- Equity ---
     async def record_equity(self, point: EquityPoint) -> None:

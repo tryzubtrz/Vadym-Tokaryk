@@ -104,6 +104,45 @@
     #loginGate .box { width: min(380px, 100%); }
     .muted { color: var(--muted); font-size: .85rem; }
     .list { max-height: 320px; overflow: auto; }
+    .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .65rem; }
+    .chip {
+      border: 1px solid var(--line); background: #152033; color: var(--muted);
+      border-radius: 999px; padding: .35rem .7rem; font-size: .78rem; cursor: pointer;
+    }
+    .chip.active { color: #041018; background: var(--accent); border-color: transparent; font-weight: 600; }
+    .chip.plus.active { background: var(--ok); }
+    .chip.minus.active { background: var(--bad); color: #fff; }
+    .trade-item {
+      display: grid; grid-template-columns: 1fr auto; gap: .35rem .75rem;
+      padding: .75rem .2rem; border-bottom: 1px solid var(--line); cursor: pointer;
+    }
+    .trade-item:active { background: rgba(255,255,255,.03); }
+    .trade-item .sym { font-weight: 600; }
+    .trade-item .meta { color: var(--muted); font-size: .78rem; }
+    .pnl-plus { color: var(--ok); font-variant-numeric: tabular-nums; font-weight: 600; }
+    .pnl-minus { color: var(--bad); font-variant-numeric: tabular-nums; font-weight: 600; }
+    .pnl-flat, .pnl-open { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .badge {
+      display: inline-block; font-size: .68rem; padding: .15rem .45rem; border-radius: 999px;
+      border: 1px solid var(--line); color: var(--muted); margin-left: .35rem;
+    }
+    .badge.plus { color: var(--ok); border-color: rgba(62,207,142,.35); }
+    .badge.minus { color: var(--bad); border-color: rgba(255,107,107,.35); }
+    .badge.open { color: var(--accent); border-color: rgba(77,163,255,.35); }
+    #tradeSheet {
+      position: fixed; inset: 0; z-index: 40; display: none;
+      background: rgba(5,8,14,.72); padding: 1rem; align-items: end; justify-content: center;
+    }
+    #tradeSheet.open { display: flex; }
+    #tradeSheet .sheet {
+      width: min(520px, 100%); max-height: min(85vh, 640px); overflow: auto;
+      background: #121a27; border: 1px solid var(--line); border-radius: 18px 18px 14px 14px;
+      padding: 1rem; animation: sheetUp .18s ease-out;
+    }
+    @keyframes sheetUp { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+    .kv { display: grid; grid-template-columns: 110px 1fr; gap: .35rem .6rem; font-size: .9rem; margin: .7rem 0; }
+    .kv .k { color: var(--muted); }
+    .kv .v { font-variant-numeric: tabular-nums; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -179,13 +218,34 @@
 
     <div id="panel-history" class="panel">
       <section>
-        <h2>Угоди</h2>
-        <div class="card list"><table><thead><tr><th>Час</th><th>Дія</th><th>Пара</th><th>Size</th></tr></thead><tbody id="tradesBody"></tbody></table></div>
+        <h2>Підсумок угод</h2>
+        <div class="grid">
+          <div class="card"><div class="label">У плюс</div><div class="value pnl-plus" id="stWins">—</div></div>
+          <div class="card"><div class="label">У мінус</div><div class="value pnl-minus" id="stLosses">—</div></div>
+          <div class="card"><div class="label">Net PnL</div><div class="value" id="stNet">—</div></div>
+          <div class="card"><div class="label">Всього записів</div><div class="value" id="stTotal">—</div></div>
+        </div>
+      </section>
+      <section>
+        <h2>Історія угод</h2>
+        <div class="chips" id="tradeFilters">
+          <button class="chip active" data-f="all" onclick="setTradeFilter('all')">Усі</button>
+          <button class="chip plus" data-f="plus" onclick="setTradeFilter('plus')">У плюс</button>
+          <button class="chip minus" data-f="minus" onclick="setTradeFilter('minus')">У мінус</button>
+          <button class="chip" data-f="closed" onclick="setTradeFilter('closed')">Закриті</button>
+          <button class="chip" data-f="open" onclick="setTradeFilter('open')">Відкриття</button>
+        </div>
+        <p class="muted" id="tradeFilterHint">Натисни угоду, щоб відкрити деталі</p>
+        <div class="card list" id="tradesList" style="max-height:420px">—</div>
       </section>
       <section>
         <h2>Рішення AI</h2>
         <div class="card list" id="decisionsBox"></div>
       </section>
+    </div>
+
+    <div id="tradeSheet" onclick="if(event.target===this)closeTradeSheet()">
+      <div class="sheet" id="tradeSheetBody"></div>
     </div>
 
     <div id="panel-chat" class="panel">
@@ -387,15 +447,109 @@ async function loadChat(){
   (r.history||[]).forEach(m=>appendMsg(m.role==='user'?'user':'bot', m.text));
 }
 
+let TRADE_FILTER = 'all';
+let TRADES_CACHE = {};
+
+function money(n){
+  const v = Number(n||0);
+  const sign = v>0?'+':'';
+  return sign + '$' + v.toFixed(4);
+}
+function fmtTime(iso){
+  if(!iso) return '—';
+  const s = String(iso);
+  // 2026-07-25T04:38:44... → 25.07 04:38:44
+  try {
+    const d = new Date(s);
+    if(!isNaN(d)){
+      const dd = String(d.getUTCDate()).padStart(2,'0');
+      const mm = String(d.getUTCMonth()+1).padStart(2,'0');
+      const hh = String(d.getUTCHours()).padStart(2,'0');
+      const mi = String(d.getUTCMinutes()).padStart(2,'0');
+      const ss = String(d.getUTCSeconds()).padStart(2,'0');
+      return `${dd}.${mm} ${hh}:${mi}:${ss} UTC`;
+    }
+  } catch(e){}
+  return s.replace('T',' ').slice(0,19);
+}
+function pnlClass(result){
+  if(result==='plus') return 'pnl-plus';
+  if(result==='minus') return 'pnl-minus';
+  if(result==='open') return 'pnl-open';
+  return 'pnl-flat';
+}
+function setTradeFilter(f){
+  TRADE_FILTER = f;
+  document.querySelectorAll('#tradeFilters .chip').forEach(c=>{
+    c.classList.toggle('active', c.dataset.f === f);
+  });
+  loadHistory();
+}
 async function loadHistory(){
-  const t = await api('/api/trades');
-  $('tradesBody').innerHTML = (t.trades||[]).map(x=>`<tr><td>${(x.created_at||'').toString().slice(11,19)}</td><td>${x.action}</td><td>${x.symbol}</td><td>${Number(x.size).toFixed(4)}</td></tr>`).join('');
+  const t = await api(`/api/trades?result=${encodeURIComponent(TRADE_FILTER)}&limit=400`);
+  const st = t.stats || {};
+  $('stWins').textContent = `${st.wins||0} · ${money(st.gross_profit||0)}`;
+  $('stLosses').textContent = `${st.losses||0} · ${money(st.gross_loss||0)}`;
+  const net = Number(st.net_pnl||0);
+  $('stNet').textContent = money(net);
+  $('stNet').className = 'value ' + (net>0?'pnl-plus': net<0?'pnl-minus':'');
+  $('stTotal').textContent = String(st.total||0);
+  TRADES_CACHE = {};
+  const rows = t.trades || [];
+  rows.forEach(x => { if(x.id!=null) TRADES_CACHE[x.id] = x; });
+  $('tradeFilterHint').textContent = rows.length
+    ? `Знайдено ${rows.length}. Натисни угоду, щоб відкрити деталі`
+    : 'Немає угод у цьому фільтрі';
+  $('tradesList').innerHTML = rows.map(x=>{
+    const pnlTxt = x.result==='open' ? 'відкриття' : money(x.pnl);
+    return `<div class="trade-item" onclick="openTrade(${x.id})">
+      <div>
+        <div class="sym">${x.symbol||'—'} <span class="badge ${x.result}">${x.result_label||x.result}</span></div>
+        <div class="meta">${fmtTime(x.created_at)} · ${x.action} · ${x.side||''}</div>
+        <div class="meta">size ${Number(x.size||0).toFixed(6)} @ ${Number(x.price||0).toPrecision(6)} · ~$${Number(x.notional||0).toFixed(2)}</div>
+      </div>
+      <div class="${pnlClass(x.result)}" style="align-self:center">${pnlTxt}</div>
+    </div>`;
+  }).join('') || '<div class="muted">Порожньо</div>';
+
   const d = await api('/api/decisions');
   $('decisionsBox').innerHTML = (d.decisions||[]).slice(0,15).map(x=>{
     const s = x.reasoning || x.summary || JSON.stringify(x).slice(0,180);
     return `<div style="padding:.4rem 0;border-bottom:1px solid var(--line)">${s}</div>`;
   }).join('') || '—';
 }
+async function openTrade(id){
+  let t = TRADES_CACHE[id];
+  if(!t){
+    const r = await api(`/api/trades/${id}`);
+    t = r.trade;
+  }
+  if(!t) return;
+  const pnlTxt = t.result==='open' ? '—' : money(t.pnl);
+  $('tradeSheetBody').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:.5rem">
+      <div>
+        <div style="font-size:1.15rem;font-weight:700">${t.symbol||'—'}</div>
+        <div class="muted">${t.result_label||''} · #${t.id||'—'}</div>
+      </div>
+      <button onclick="closeTradeSheet()">Закрити</button>
+    </div>
+    <div class="kv">
+      <div class="k">Результат</div><div class="v ${pnlClass(t.result)}">${t.result_label} · ${pnlTxt}</div>
+      <div class="k">PnL</div><div class="v ${pnlClass(t.result)}">${pnlTxt}</div>
+      <div class="k">Дія</div><div class="v">${t.action||'—'} / ${t.side||'—'}</div>
+      <div class="k">Size</div><div class="v">${Number(t.size||0)}</div>
+      <div class="k">Ціна</div><div class="v">${Number(t.price||0)}</div>
+      <div class="k">Номінал</div><div class="v">$${Number(t.notional||0).toFixed(4)}</div>
+      <div class="k">Плече</div><div class="v">${Number(t.leverage||1)}x</div>
+      <div class="k">Режим</div><div class="v">${t.mode||'—'}</div>
+      <div class="k">Час</div><div class="v">${fmtTime(t.created_at)}</div>
+      <div class="k">Причина AI</div><div class="v">${(t.reasoning||'—').replace(/</g,'&lt;')}</div>
+    </div>
+  `;
+  $('tradeSheet').classList.add('open');
+}
+function closeTradeSheet(){ $('tradeSheet').classList.remove('open'); }
 
 async function loadCandles(){
   const symbol = $('symSelect').value; if(!symbol) return;
