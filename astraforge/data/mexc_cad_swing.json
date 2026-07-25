@@ -1,9 +1,9 @@
 {
   "enabled": true,
-  "symbol": "CAD/USDT:USDT",
+  "symbol": "XRP/USDC:USDC",
   "leverage": 1,
   "target_notional_usdt": 9.0,
-  "min_tp_pct": 0.25,
+  "min_tp_pct": 0.35,
   "max_hold_sec": 43200,
   "open_cooldown_sec": 2700,
   "range_lookback": 40,
@@ -11,6 +11,8 @@
   "open": null,
   "last_open_at": "",
   "last_close_at": "",
-  "realized_pnl_usdt": 0.0,
-  "updated_at": "2026-07-25T09:29:45.913092+00:00"
+  "realized_pnl_usdt": -0.00184,
+  "measured_taker_pct": 0.08,
+  "updated_at": "2026-07-25T09:52:13.440630+00:00",
+  "notes": "CAD_USDT geo-blocked; funded with USDC; first fill fee ~0.08%/side despite API zero"
 }
