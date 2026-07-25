@@ -229,16 +229,39 @@ class FxMultiScalper:
             logger.info("fx_slot_closed", symbol=symbol, action=action, pnl=realized)
         return results
 
-    async def maybe_open(self) -> dict[str, Any] | None:
+    async def maybe_open(self, available_usd: float | None = None) -> dict[str, Any] | None:
         self.store.ensure_day()
         snap = self.store.snapshot()
         fx_cap = float(snap.get("fx_bucket_usd") or 0)
+        crypto_reserve = float(snap.get("crypto_hold_usd") or 0)
         open_n = self.store.open_slot_count()
         max_slots = int(snap.get("max_slots") or 10)
         if open_n >= max_slots or fx_cap < 4:
             return {"skipped": True, "reason": "no_slot_capacity_or_capital"}
 
+        # Real cash available for FX (leave crypto bucket untouched)
+        cash = float(available_usd) if available_usd is not None else fx_cap
+        spendable = min(fx_cap, max(0.0, cash - crypto_reserve))
+        # Fee / dust buffer
+        spendable = max(0.0, spendable * 0.98)
+        if spendable < 4.0:
+            return {
+                "skipped": True,
+                "reason": f"spendable_usd_{spendable:.2f}_below_min (cash={cash:.2f}, crypto_reserve={crypto_reserve:.2f})",
+            }
+
         pairs = [p for p in (snap.get("fx_pairs") or []) if p]
+        # Only pairs we can buy with USD cash (quote=USD). Skip CAD-quoted until we hold CAD.
+        tradeable = []
+        for p in pairs:
+            if p.endswith("/USD"):
+                tradeable.append(p)
+            elif p.startswith("USD/") or p.endswith("/CAD"):
+                logger.info("fx_skip_pair_needs_cad_or_wrong_side", symbol=p)
+        pairs = tradeable or [p for p in pairs if p.endswith("/USD")]
+        if not pairs:
+            return {"skipped": True, "reason": "no_usd_quoted_fx_pairs"}
+
         # skip pairs already open
         open_syms = {s.get("symbol") for s in (snap.get("open_slots") or [])}
         candidates: list[dict[str, Any]] = []
@@ -258,32 +281,41 @@ class FxMultiScalper:
             return {"skipped": True, "reason": pick.get("reason") or "ai_wait", "ai": pick}
 
         symbol = str(pick["symbol"])
+        if not symbol.endswith("/USD"):
+            return {"skipped": True, "reason": f"pair_{symbol}_needs_non_usd_cash", "ai": pick}
         info = next((c for c in candidates if c["symbol"] == symbol), None)
         if not info or not info.get("in_buy_zone"):
             return {"skipped": True, "reason": "not_in_buy_zone_after_ai", "ai": pick}
 
         slot_usd = self.effective_slot_usd(symbol)
-        # Cap by remaining free capital (reserve for open notionals approx)
+        # Cap by remaining free FX capital and real spendable cash
         used = sum(float(s.get("notional_usd") or 0) for s in (snap.get("open_slots") or []))
-        free = max(0.0, fx_cap - used)
+        free = max(0.0, min(fx_cap - used, spendable))
         if free < slot_usd:
             slot_usd = free
         if slot_usd < 4.0:
             return {"skipped": True, "reason": f"free_capital_{free:.2f}_below_min"}
 
         px = float(info["price"])
-        amount = slot_usd / px if "USD/" in symbol or symbol.endswith("/USD") else slot_usd / px
-        # USD/CAD: base USD, amount in USD
-        if symbol.startswith("USD/"):
-            amount = slot_usd  # spend slot_usd USD to buy CAD
-        elif symbol.endswith("/USD"):
-            amount = slot_usd / px
-        elif symbol.endswith("/CAD"):
-            # price is CAD per 1 base; approximate USD via USD/CAD if needed — use notional in quote conservatively
-            amount = slot_usd / px
+        # EUR/USD etc: amount in base = USD_notional / price
+        amount = slot_usd / px if px > 0 else 0.0
         try:
             ex = self.exchange._exchange
             if ex:
+                market = (ex.markets or {}).get(symbol) or {}
+                min_amt = float(((market.get("limits") or {}).get("amount") or {}).get("min") or 0)
+                if min_amt and amount < min_amt:
+                    # Bump to exchange min if still within spendable
+                    need = min_amt * px
+                    if need <= free:
+                        amount = min_amt
+                        slot_usd = need
+                    else:
+                        return {
+                            "skipped": True,
+                            "reason": f"min_lot_{need:.2f}_usd_exceeds_free_{free:.2f}",
+                            "symbol": symbol,
+                        }
                 amount = float(ex.amount_to_precision(symbol, amount))
         except Exception:  # noqa: BLE001
             pass
@@ -292,7 +324,9 @@ class FxMultiScalper:
         try:
             order = await self.exchange.create_market_order(symbol, "buy", amount)
         except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "error": str(exc), "symbol": symbol, "ai": pick}
+            err = str(exc)
+            # Soft skip — do not leave breaker tripped for sizing/cash mismatches
+            return {"ok": False, "soft_fail": True, "error": err, "symbol": symbol, "ai": pick}
 
         fill = float(order.get("average") or order.get("price") or px)
         slot = {
@@ -312,9 +346,9 @@ class FxMultiScalper:
         logger.info("fx_slot_opened", symbol=symbol, amount=amount, entry=fill)
         return {"ok": True, "slot": slot, "order": order, "ai": pick}
 
-    async def tick(self) -> dict[str, Any]:
+    async def tick(self, available_usd: float | None = None) -> dict[str, Any]:
         closed = await self.manage_open_slots()
-        opened = await self.maybe_open()
+        opened = await self.maybe_open(available_usd=available_usd)
         return {
             "closed": closed,
             "opened": opened,

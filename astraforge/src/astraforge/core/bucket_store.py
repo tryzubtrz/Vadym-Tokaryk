@@ -35,12 +35,12 @@ class BucketStore:
             "realized_fx_pnl_total": 0.0,
             "open_slots": [],  # list of slot dicts
             "fx_pairs": [
-                "USD/CAD",
-                "EUR/CAD",
                 "EUR/USD",
                 "GBP/USD",
                 "AUD/USD",
             ],
+            "fx_target_usd": 20.0,  # fixed FX allocation; rest of equity → crypto
+            "auto_split_equity": True,
             "take_profit_pips_min": 12,
             "take_profit_pips_max": 18,
             "range_lookback": 40,
@@ -87,6 +87,28 @@ class BucketStore:
             self.data["day_key"] = today
             self.data["daily_profit_usd"] = 0.0
             self.save()
+
+    def sync_to_equity(self, equity: float, *, fx_target: float | None = None) -> dict[str, Any]:
+        """Keep FX at ~$20 (or fx_target), put the rest into crypto hold.
+
+        With ~$26 equity → FX $20 + crypto ~$6. Never allocate more than cash.
+        """
+        eq = max(0.0, float(equity or 0))
+        target = float(fx_target if fx_target is not None else (self.data.get("fx_target_usd") or 20.0))
+        if target <= 0:
+            target = 20.0
+        fx = min(target, eq)
+        crypto = max(0.0, round(eq - fx, 4))
+        self.data["fx_target_usd"] = target
+        self.data["fx_bucket_usd"] = round(fx, 4)
+        self.data["crypto_hold_usd"] = crypto
+        self.data["auto_split_equity"] = True
+        # Prefer USD-quoted FX pairs (account is USD). CAD pairs need CAD cash.
+        pairs = list(self.data.get("fx_pairs") or [])
+        if any(p.endswith("/CAD") or p.startswith("USD/") for p in pairs):
+            self.data["fx_pairs"] = ["EUR/USD", "GBP/USD", "AUD/USD"]
+        self.save()
+        return {"fx_bucket_usd": fx, "crypto_hold_usd": crypto, "equity": eq}
 
     def snapshot(self) -> dict[str, Any]:
         self.ensure_day()

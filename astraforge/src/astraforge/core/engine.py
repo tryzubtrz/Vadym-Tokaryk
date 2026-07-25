@@ -244,18 +244,24 @@ class TradingEngine:
 
         # FX multi-scalp path (priority strategy)
         if getattr(self.settings, "trading_style", "") == "fx_multi_scalp":
-            fx_result = await self.fx.tick()
+            # $20 FX + rest crypto (auto, based on live equity)
+            split = self.buckets.sync_to_equity(account.equity, fx_target=20.0)
+            fx_result = await self.fx.tick(available_usd=float(account.available_balance))
             self._last_fx_tick = fx_result
             opened = fx_result.get("opened") or {}
             closed = fx_result.get("closed") or []
             ai = fx_result.get("ai") or {}
-            parts = []
+            parts = [
+                f"split FX=${split['fx_bucket_usd']:.2f}/crypto=${split['crypto_hold_usd']:.2f}"
+            ]
             for c in closed:
                 if c.get("ok"):
                     parts.append(f"FX close {c.get('symbol')} pnl={float(c.get('pnl') or 0):+.4f}")
             if opened.get("ok"):
                 slot = opened.get("slot") or {}
                 parts.append(f"FX open {slot.get('symbol')} @ {slot.get('entry')}")
+            elif opened.get("soft_fail"):
+                parts.append(f"FX soft_fail: {opened.get('error')}")
             elif opened.get("skipped"):
                 parts.append(f"FX wait: {opened.get('reason')}")
             pick = (ai.get("pick") or {})
@@ -266,6 +272,7 @@ class TradingEngine:
                 {
                     "type": "fx_tick",
                     "result": fx_result,
+                    "split": split,
                     "pnl_today": pnl_today,
                     "equity": account.equity,
                     "reasoning": self._last_status_summary,

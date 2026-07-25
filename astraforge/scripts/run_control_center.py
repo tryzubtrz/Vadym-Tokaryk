@@ -71,7 +71,7 @@ async def main() -> None:
         zero_fee_mode=os.getenv("ZERO_FEE_MODE", "true").lower() in {"1", "true", "yes"},
         min_take_profit_pct=float(os.getenv("MIN_TAKE_PROFIT_PCT", "0.12")),
         fx_bucket_usd=float(os.getenv("FX_BUCKET_USD", "20")),
-        crypto_bucket_usd=float(os.getenv("CRYPTO_BUCKET_USD", "8")),
+        crypto_bucket_usd=float(os.getenv("CRYPTO_BUCKET_USD", "0")),  # rest of equity after FX $20
         dashboard_owner_email=os.getenv("DASHBOARD_OWNER_EMAIL", ""),
         database_path=os.environ["DATABASE_PATH"],
         dashboard_host=os.getenv("DASHBOARD_HOST", "0.0.0.0"),

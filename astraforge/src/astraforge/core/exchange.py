@@ -603,7 +603,11 @@ class ExchangeClient:
                 logger.error("order_failed", error=str(last), symbol=symbol, side=side)
                 raise last
             if "margin" in err or "insufficient" in err:
-                await self.breaker.trip(BreakerReason.MARGIN_CALL, detail=str(exc))
+                # Spot cash shortfalls are common with tiny balances — don't hard-stop the bot
+                if self.settings.is_spot and "insufficient" in err:
+                    logger.warning("spot_insufficient_funds_soft", error=str(exc), symbol=symbol)
+                else:
+                    await self.breaker.trip(BreakerReason.MARGIN_CALL, detail=str(exc))
             else:
                 await self.breaker.trip(BreakerReason.API_ERROR, detail=str(exc))
             raise
