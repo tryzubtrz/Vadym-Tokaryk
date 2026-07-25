@@ -46,8 +46,8 @@ def _default_state() -> dict[str, Any]:
         "min_tp_pct": 0.40,  # > measured RT ~0.16%
         "stop_pct": 0.55,
         "max_hold_sec": 3_600,  # 1h
-        "cooldown_sec": 900,
-        "min_score": 0.62,
+        "cooldown_sec": 600,
+        "min_score": 0.48,
         "leverage": 1,
         "open": None,
         "last_open_at": "",
@@ -81,6 +81,8 @@ def load_state() -> dict[str, Any]:
     base["stake_usdc"] = min(max(float(base.get("stake_usdc") or 1.0), 0.5), 1.0)
     base["max_loss_usdc"] = min(float(base.get("max_loss_usdc") or 5.0), 5.0)
     base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.40), 0.30)
+    base["min_score"] = min(max(float(base.get("min_score") or 0.48), 0.35), 0.70)
+    base["cooldown_sec"] = min(max(float(base.get("cooldown_sec") or 600), 300), 3600)
     return base
 
 
@@ -240,61 +242,74 @@ class MexcMicroAI:
             score += 0.35 * t_score
             parts["trend"] = t_score
 
-        # RSI: prefer mild oversold bounce for longs, avoid overbought chase
+        # RSI: oversold bounce OR cooling pullback in uptrend (not chase >70)
+        uptrend = bool(ema_fast is not None and ema_slow is not None and ema_fast > ema_slow)
         if rsi5 is not None:
-            if 35 <= rsi5 <= 55:
-                r = 0.8
-            elif 28 <= rsi5 < 35:
+            if 30 <= rsi5 <= 52:
+                r = 0.9
+            elif 52 < rsi5 <= 62 and uptrend:
+                r = 0.45  # mild continuation only with trend
+            elif 22 <= rsi5 < 30:
                 r = 1.0
+            elif rsi5 > 70:
+                r = -1.0  # hard no chase
             elif rsi5 > 65:
-                r = -0.8
+                r = -0.6
             else:
-                r = 0.1
-            score += 0.25 * r
+                r = 0.0
+            score += 0.28 * r
             parts["rsi5"] = r
 
         if rsi1 is not None:
-            if rsi1 < 30:
-                r = 0.7
-            elif rsi1 > 70:
-                r = -0.7
+            if rsi1 < 32:
+                r = 0.85
+            elif 32 <= rsi1 <= 55 and uptrend:
+                r = 0.55  # pullback entry zone
+            elif rsi1 > 72:
+                r = -0.9
+            elif rsi1 > 65:
+                r = -0.4
             else:
                 r = 0.0
-            score += 0.15 * r
+            score += 0.18 * r
             parts["rsi1"] = r
 
-        # buy lower third of 15m range
-        if range_pos <= 0.33:
-            rz = 1.0 - range_pos  # lower = better
-            score += 0.15 * min(1.0, rz)
+        # prefer lower half of 15m range
+        if range_pos <= 0.40:
+            rz = 1.0 - range_pos
+            score += 0.18 * min(1.0, rz)
             parts["range"] = rz
-        elif range_pos >= 0.7:
-            score -= 0.2
-            parts["range"] = -0.2
+        elif range_pos >= 0.75:
+            score -= 0.25
+            parts["range"] = -0.25
         else:
             parts["range"] = 0.0
 
-        # short momentum confirmation (not chasing vertical spike)
-        if 0.02 <= mom5 <= 0.25:
-            score += 0.10
-            parts["mom5"] = 0.10
-        elif mom5 < -0.15:
-            score -= 0.15
-            parts["mom5"] = -0.15
+        # momentum: allow gentle continuation, reject dumps / vertical spikes
+        if 0.0 <= mom5 <= 0.30 and uptrend:
+            score += 0.12
+            parts["mom5"] = 0.12
+        elif mom5 < -0.18:
+            score -= 0.20
+            parts["mom5"] = -0.20
         else:
             parts["mom5"] = 0.0
 
-        if mom1 < -0.12:
-            score -= 0.10
+        if -0.08 <= mom1 <= 0.12 and uptrend:
+            score += 0.08
+            parts["mom1"] = 0.08
+        elif mom1 < -0.15:
+            score -= 0.12
+            parts["mom1"] = -0.12
+        elif mom1 > 0.20:
+            score -= 0.10  # don't chase spike
             parts["mom1"] = -0.10
-        elif 0.01 <= mom1 <= 0.15:
-            score += 0.05
-            parts["mom5"] = parts.get("mom5", 0)  # keep
-            parts["mom1"] = 0.05
+        else:
+            parts["mom1"] = 0.0
 
         # clamp
         score = max(-1.0, min(1.0, score))
-        min_score = float(self.state.get("min_score") or 0.62)
+        min_score = float(self.state.get("min_score") or 0.48)
         side = None
         if score >= min_score:
             side = "long"
