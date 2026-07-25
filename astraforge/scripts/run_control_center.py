@@ -117,7 +117,7 @@ async def main() -> None:
 
     if not await engine.state.get_active_goal():
         await engine.handle_user_text(
-            "FX multi scalp: часті маленькі угоди по валютах, ціль 1$ на день"
+            "FX $20 маленькі плюси + люта крипта на решті ~$6, ціль 1$ на день"
         )
 
     print("Buckets:", engine.buckets.snapshot(), flush=True)

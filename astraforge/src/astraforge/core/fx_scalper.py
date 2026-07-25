@@ -418,7 +418,7 @@ class FxMultiScalper:
 
     async def _ensure_cad_float(self, spendable_usd: float) -> dict[str, Any]:
         """Keep a CAD working balance (~35% of FX spendable) via USD/CAD sell."""
-        target_usd = min(max(spendable_usd * 0.35, 0.0), 10.0)
+        target_usd = min(max(spendable_usd * 0.25, 0.0), 7.0)
         if target_usd < 5.0:
             # Not enough room for Kraken USD/CAD min convert
             return {"ok": True, "skipped": True, "reason": "cad_float_budget_below_min"}

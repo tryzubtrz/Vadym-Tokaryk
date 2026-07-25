@@ -170,7 +170,11 @@ class OrderExecutor:
         max_pos = self.exchange.settings.effective_max_position_pct(account.equity)
         max_notional = account.equity * (max_pos / 100.0)
         cash_cap = max(0.0, account.available_balance * 0.95)
-        cap = min(max_notional, cash_cap) if cash_cap > 0 else max_notional
+        # Micro crypto bucket: prefer cash_cap so exchange mins (XRP/DOGE/…) are reachable
+        if account.equity < 50 and cash_cap > 0:
+            cap = cash_cap
+        else:
+            cap = min(max_notional, cash_cap) if cash_cap > 0 else max_notional
         if need * price > cap and price > 0:
             need = cap / price
         if min_amt and need < min_amt:

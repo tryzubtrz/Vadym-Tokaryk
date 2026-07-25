@@ -102,7 +102,7 @@ class TradeDecision(BaseModel):
     action: ActionType
     symbol: str | None = None
     side: Side | None = None
-    size_pct_of_equity: float = Field(default=0.0, ge=0.0, le=40.0)
+    size_pct_of_equity: float = Field(default=0.0, ge=0.0, le=100.0)
     leverage: float = Field(default=1.0, ge=1.0, le=5.0)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     reasoning: str = ""

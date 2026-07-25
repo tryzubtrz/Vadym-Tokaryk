@@ -22,7 +22,7 @@ HARD_MAX_DRAWDOWN_PCT = 7.0
 HARD_MAX_LEVERAGE = 5.0
 HARD_MAX_POSITION_PCT = 4.0
 # Spot micro-accounts (no leverage): allow larger slice so exchange mins are reachable.
-HARD_MAX_POSITION_PCT_SPOT_MICRO = 35.0
+HARD_MAX_POSITION_PCT_SPOT_MICRO = 95.0
 HARD_MAX_OPEN_POSITIONS = 10
 MICRO_EQUITY_USD = 100.0
 
@@ -146,9 +146,12 @@ class Settings(BaseSettings):
     def effective_max_position_pct(self, equity: float | None = None) -> float:
         """Position size ceiling. Spot micro-accounts need higher % to clear exchange mins."""
         if self.is_spot and equity is not None and equity < MICRO_EQUITY_USD:
+            # Tiny crypto bucket (~$6): allow nearly full bucket per scalp
+            if equity < 30:
+                return min(HARD_MAX_POSITION_PCT_SPOT_MICRO, 95.0)
             return min(
                 HARD_MAX_POSITION_PCT_SPOT_MICRO,
-                max(self.max_position_pct, 25.0),
+                max(self.max_position_pct, 35.0),
             )
         return min(self.max_position_pct, HARD_MAX_POSITION_PCT)
 

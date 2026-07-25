@@ -17,6 +17,7 @@ from astraforge.core.exchange import ExchangeClient
 from astraforge.core.fx_scalper import FxMultiScalper
 from astraforge.core.goal_interpreter import GoalInterpreter
 from astraforge.core.models import (
+    AccountSnapshot,
     ActionType,
     EquityPoint,
     GoalType,
@@ -264,7 +265,7 @@ class TradingEngine:
                 self._last_status_summary = f"paused: {reason}"
                 return
 
-        # FX multi-scalp path (priority strategy)
+        # FX multi-scalp path (priority strategy) + fierce crypto on leftover bucket
         if fx_style:
             # $20 FX + rest crypto (auto, based on live equity)
             split = self.buckets.sync_to_equity(account.equity, fx_target=20.0)
@@ -288,11 +289,22 @@ class TradingEngine:
                 parts.append(f"FX wait: {opened.get('reason')}")
             pick = (ai.get("pick") or {})
             if pick:
-                parts.append(f"AI:{pick.get('action')}:{pick.get('symbol') or '-'} ({pick.get('reason','')[:80]})")
-            self._last_status_summary = " | ".join(parts) or "FX idle"
+                parts.append(
+                    f"AI:{pick.get('action')}:{pick.get('symbol') or '-'} ({pick.get('reason','')[:80]})"
+                )
+
+            # Fierce crypto scalp on leftover bucket (~$6+)
+            try:
+                crypto_parts = await self._run_crypto_bucket_scalp(account, pnl_today)
+                parts.extend(crypto_parts)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("crypto_bucket_scalp_failed", error=str(exc))
+                parts.append(f"crypto_err:{exc}")
+
+            self._last_status_summary = " | ".join(parts) or "FX+crypto idle"
             await self.state.log_decision(
                 {
-                    "type": "fx_tick",
+                    "type": "fx_crypto_tick",
                     "result": fx_result,
                     "split": split,
                     "pnl_today": pnl_today,
@@ -371,6 +383,172 @@ class TradingEngine:
         await self.state.log_decision(payload)
         self._last_status_summary = self.agent.last_reasoning
         logger.info("tick_complete", summary=self._last_status_summary)
+
+    def _crypto_symbols(self) -> list[str]:
+        """Coins affordable on a ~$6–15 crypto bucket (Kraken spot mins)."""
+        raw = [
+            "XRP/USD",
+            "DOGE/USD",
+            "ADA/USD",
+            "DOT/USD",
+            "ETH/USD",
+            "BTC/USD",
+            "AVAX/USD",
+            "SOL/USD",
+            "SHIB/USD",
+            "LINK/USD",
+        ]
+        # Prefer settings trade list crypto entries if present
+        from_settings = [
+            s for s in self.settings.symbols if s.endswith("/USD") and s.split("/")[0] not in {
+                "USD", "EUR", "GBP", "AUD", "CAD"
+            }
+        ]
+        out: list[str] = []
+        for s in from_settings + raw:
+            if s not in out:
+                out.append(s)
+        return out[:8]
+
+    async def _run_crypto_bucket_scalp(self, account: AccountSnapshot, pnl_today: float) -> list[str]:
+        """Aggressive momentum scalp using ONLY the leftover crypto bucket (~$6+)."""
+        snap = self.buckets.snapshot()
+        budget = float(snap.get("crypto_hold_usd") or 0)
+        if budget < 1.5:
+            return [f"crypto skip: budget ${budget:.2f} too small"]
+
+        free_usd = float(await self.exchange.free_balance("USD"))
+        # Never spend FX-reserved USD: keep FX target aside when possible
+        fx_need = float(snap.get("fx_bucket_usd") or 20.0)
+        # Approximate FX cash already parked in CAD
+        cad_usd = 0.0
+        try:
+            cad = float(await self.exchange.free_balance("CAD"))
+            if cad > 0:
+                t = await self.exchange.fetch_ticker("USD/CAD")
+                px = float(t.get("last") or 0)
+                if px > 0:
+                    cad_usd = cad / px
+        except Exception:  # noqa: BLE001
+            pass
+        fx_usd_still_needed = max(0.0, fx_need - cad_usd)
+        crypto_cash = min(budget, max(0.0, free_usd - fx_usd_still_needed))
+        # If CAD already covers most FX float, free USD can go to crypto up to budget
+        if cad_usd >= fx_need * 0.5:
+            crypto_cash = min(budget, free_usd * 0.98)
+        crypto_cash = max(0.0, crypto_cash * 0.98)
+        if crypto_cash < 1.5:
+            return [f"crypto skip: cash ${crypto_cash:.2f} (usd={free_usd:.2f}, cad≈${cad_usd:.2f})"]
+
+        symbols = self._crypto_symbols()
+        markets = await self.agent.analyze_markets(self.exchange, symbols)
+
+        # Crypto positions only (spot holdings that are coins)
+        crypto_pos = [
+            p for p in (account.positions or [])
+            if p.symbol in symbols or (p.symbol and p.symbol.endswith("/USD") and not p.symbol.startswith(("EUR", "GBP", "AUD", "USD")))
+        ]
+        crypto_account = AccountSnapshot(
+            equity=max(budget, crypto_cash),
+            available_balance=crypto_cash,
+            used_margin=0.0,
+            unrealized_pnl=sum(float(p.unrealized_pnl or 0) for p in crypto_pos),
+            realized_pnl_today=0.0,
+            peak_equity=max(budget, crypto_cash),
+            drawdown_pct=0.0,
+            positions=crypto_pos,
+            mode=account.mode,
+        )
+
+        # Aggressive temporary profile for crypto opens
+        prev_profile = self.risk._profile
+        self.risk.set_profile(RiskProfile.AGGRESSIVE)
+
+        parts: list[str] = [f"crypto ${crypto_cash:.2f}/{budget:.2f}"]
+        try:
+            auto_closes = await self._zero_fee_auto_exits(crypto_account, markets)
+            for decision in auto_closes:
+                # Size close against full live account (need real balances)
+                result = await self.executor.execute(decision, account)
+                if result.get("ok") and not result.get("rejected"):
+                    parts.append(f"CRYPTO close {decision.symbol}")
+                    account = await self.exchange.get_account_snapshot(
+                        peak_equity=float(await self.state.get_kv("peak_equity", 0) or 0)
+                    )
+                    crypto_account.positions = [
+                        p for p in account.positions if p.symbol in symbols
+                    ]
+
+            goal = await self.state.get_active_goal()
+            crypto_goal = TradingGoal(
+                goal_type=GoalType.PROFIT_USD,
+                target_profit_usd=max(0.5, float(getattr(goal, "target_profit_usd", None) or 0.5)),
+                risk_profile=RiskProfile.AGGRESSIVE,
+                period="day",
+                raw_text="fierce crypto scalp on leftover bucket — frequent small wins",
+                language="en",
+                active=True,
+            )
+
+            # Refresh cash after closes
+            free_usd = float(await self.exchange.free_balance("USD"))
+            if cad_usd >= fx_need * 0.5:
+                crypto_cash = min(budget, free_usd * 0.98)
+            else:
+                crypto_cash = min(budget, max(0.0, free_usd - fx_usd_still_needed)) * 0.98
+            crypto_account.available_balance = max(0.0, crypto_cash)
+            crypto_account.equity = max(budget, crypto_cash)
+
+            # Force momentum_scalp style for this decide call
+            old_style = self.settings.trading_style
+            object.__setattr__(self.settings, "trading_style", "momentum_scalp")
+            try:
+                batch = await self.agent.decide(
+                    account=crypto_account,
+                    markets=markets,
+                    goal=crypto_goal,
+                    risk_limits=self.risk.limits,
+                    pnl_today=pnl_today,
+                )
+            finally:
+                object.__setattr__(self.settings, "trading_style", old_style)
+
+            for decision in batch.decisions:
+                if decision.action == ActionType.OPEN_LONG:
+                    # Spend from crypto bucket only
+                    decision.size_pct_of_equity = max(
+                        float(decision.size_pct_of_equity or 0),
+                        55.0,  # fierce: use most of micro bucket
+                    )
+                    decision.confidence = max(float(decision.confidence or 0), 0.45)
+                # Execute against crypto-capped account for sizing opens;
+                # closes need live account positions
+                exec_account = crypto_account if decision.action == ActionType.OPEN_LONG else account
+                result = await self.executor.execute(decision, exec_account)
+                act = decision.action.value if hasattr(decision.action, "value") else str(decision.action)
+                if result.get("ok") and not result.get("rejected"):
+                    parts.append(f"CRYPTO {act} {decision.symbol}")
+                    if decision.action == ActionType.OPEN_LONG:
+                        # Shrink virtual crypto cash after fill
+                        spent = float(result.get("amount") or 0) * float(result.get("price") or 0)
+                        crypto_account.available_balance = max(
+                            0.0, crypto_account.available_balance - spent
+                        )
+                    account = await self.exchange.get_account_snapshot(
+                        peak_equity=float(await self.state.get_kv("peak_equity", 0) or 0)
+                    )
+                elif result.get("rejected") or not result.get("ok"):
+                    why = result.get("reason") or result.get("error") or "rejected"
+                    if decision.action == ActionType.OPEN_LONG:
+                        parts.append(f"crypto skip {decision.symbol}:{why}")
+                if len(parts) > 8:
+                    break
+            if self.agent.last_reasoning:
+                parts.append(f"cryptoAI:{(self.agent.last_reasoning or '')[:100]}")
+        finally:
+            self.risk.set_profile(prev_profile)
+
+        return parts
 
     async def _zero_fee_auto_exits(
         self,
