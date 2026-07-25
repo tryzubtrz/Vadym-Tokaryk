@@ -1,0 +1,30 @@
+{
+  "enabled": true,
+  "symbol": "SILVER/USDC:USDC",
+  "bankroll_usdc": 20.0,
+  "target_notional_usdc": 8.0,
+  "min_tp_pct": 0.3,
+  "early_tp_pct": 0.18,
+  "early_after_sec": 1200.0,
+  "stop_pct": 0.55,
+  "max_hold_sec": 14400.0,
+  "open_cooldown_sec": 900.0,
+  "range_lookback": 40,
+  "buy_zone_pct": 0.4,
+  "leverage": 1,
+  "open": null,
+  "last_open_at": "2026-07-25T10:41:54.819610+00:00",
+  "last_close_at": "2026-07-25T17:56:10.786802+00:00",
+  "realized_pnl_usdc": 0.012999999999999262,
+  "wins": 1,
+  "losses": 0,
+  "trades": 1,
+  "stopped": false,
+  "stop_reason": "",
+  "measured_taker_pct": 0.08,
+  "trade_log": [
+    "2026-07-25T17:56:10.786789+00:00 time entry=58.31 pnl=+0.0130 sleeve=20.01"
+  ],
+  "note": "Fiat FX geo-blocked; SILVER/USDC Kraken-style range swing with ~$20",
+  "updated_at": "2026-07-25T18:09:24.291215+00:00"
+}

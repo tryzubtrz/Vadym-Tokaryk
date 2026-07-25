@@ -1,0 +1,11 @@
+# Minimal deps for astraforge_one.py
+ccxt>=4.4.0
+pandas>=2.2.0
+httpx>=0.27.0
+aiosqlite>=0.20.0
+pydantic>=2.9.0
+# Optional:
+# aiogram>=3.13.0
+
+python-multipart>=0.0.9
+email-validator>=2.0.0

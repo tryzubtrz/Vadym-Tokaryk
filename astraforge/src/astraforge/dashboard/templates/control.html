@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>AstraForge</title>
+  <title>AstraForge</title>
+  <style>
+    :root {
+      --bg0: #071018;
+      --bg1: #0d1a24;
+      --brick: #122433;
+      --brick2: #183044;
+      --line: rgba(180,220,255,.10);
+      --text: #e7f2ff;
+      --muted: #8aa3b8;
+      --ok: #3dd68c;
+      --bad: #ff5d6c;
+      --warn: #f0b429;
+      --accent: #2ec4b6;
+      --accent2: #4cc9f0;
+      --radius: 16px;
+      --safe-bottom: max(14px, env(safe-area-inset-bottom));
+      --tab-h: 60px;
+      --font: "Avenir Next", "Segoe UI", "Trebuchet MS", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background: linear-gradient(180deg, #0a1620 0%, var(--bg0) 45%, #050b11 100%);
+      min-height: 100vh;
+      padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 20px);
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      position: sticky; top: 0; z-index: 20;
+      background: rgba(7,16,24,.96);
+      border-bottom: 1px solid var(--line);
+      padding: .75rem 1rem;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .brand { display: flex; align-items: center; gap: .6rem; }
+    .logo {
+      width: 32px; height: 32px; border-radius: 9px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+    }
+    header h1 { margin: 0; font-size: 1.1rem; letter-spacing: -.03em; font-weight: 800; }
+    .pill {
+      font-size: .7rem; padding: .25rem .55rem; border-radius: 999px;
+      border: 1px solid var(--line); color: var(--muted); font-family: var(--mono);
+    }
+    .pill.on { color: var(--ok); border-color: rgba(61,214,140,.35); }
+    .pill.off { color: var(--bad); border-color: rgba(255,93,108,.35); }
+    main { max-width: 980px; margin: 0 auto; padding: .85rem; }
+    .lego { display: grid; gap: .7rem; grid-template-columns: repeat(2, 1fr); }
+    @media (min-width: 760px) { .lego.cols-4 { grid-template-columns: repeat(4, 1fr); } }
+    .brick {
+      background: var(--brick);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: .85rem;
+    }
+    .brick .label { color: var(--muted); font-size: .75rem; }
+    .brick .value { font-size: 1.1rem; margin-top: .3rem; font-variant-numeric: tabular-nums; font-weight: 700; }
+    section { margin-top: 1rem; contain: content; }
+    section h2 {
+      font-size: .78rem; margin: 0 0 .55rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .07em; font-weight: 600;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: .45rem; }
+    button, .btn {
+      appearance: none; border: 1px solid var(--line); background: var(--brick2);
+      color: var(--text); border-radius: 12px; padding: .65rem .8rem; font-size: .88rem;
+      cursor: pointer; font-family: inherit; font-weight: 600;
+      touch-action: manipulation;
+    }
+    button.primary { background: var(--accent); border: 0; color: #04201c; }
+    button.danger { background: rgba(255,93,108,.12); border-color: rgba(255,93,108,.35); color: #ffc2c8; }
+    button.ok { background: rgba(61,214,140,.12); border-color: rgba(61,214,140,.35); color: #baf5d7; }
+    .mono { font-family: var(--mono); font-size: .8rem; }
+    .muted { color: var(--muted); font-size: .82rem; }
+    .panel { display: none; content-visibility: hidden; }
+    .panel.active { display: block; content-visibility: visible; }
+    #chatBox, .scroll {
+      max-height: 320px; overflow: auto; background: rgba(5,12,18,.55);
+      border-radius: 12px; border: 1px solid var(--line); padding: .7rem;
+      -webkit-overflow-scrolling: touch;
+    }
+    .msg { margin: .4rem 0; max-width: 92%; padding: .55rem .7rem; border-radius: 12px; white-space: pre-wrap; line-height: 1.35; font-size: .88rem; }
+    .msg.user { background: #1d3a4d; margin-left: auto; }
+    .msg.bot { background: #132636; }
+    .composer { display: flex; gap: .45rem; align-items: center; }
+    input, select, textarea {
+      width: 100%; background: #0a1620; border: 1px solid var(--line); color: var(--text);
+      border-radius: 12px; padding: .7rem .8rem; font-size: .95rem; font-family: inherit;
+    }
+    .chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; }
+    .chip {
+      border: 1px solid var(--line); background: #132636; color: var(--muted);
+      border-radius: 999px; padding: .3rem .65rem; font-size: .75rem; cursor: pointer;
+    }
+    .chip.active { color: #04201c; background: var(--accent); border-color: transparent; }
+    .trade-item, .news-item, .slot-item {
+      display: grid; grid-template-columns: 1fr auto; gap: .3rem .7rem;
+      padding: .7rem .1rem; border-bottom: 1px solid var(--line); cursor: pointer;
+    }
+    .pnl-plus { color: var(--ok); font-weight: 700; }
+    .pnl-minus { color: var(--bad); font-weight: 700; }
+    canvas { width: 100%; height: 160px; background: #0a1620; border-radius: 12px; border: 1px solid var(--line); }
+    nav.tabs {
+      position: fixed; left: 8px; right: 8px;
+      bottom: calc(var(--safe-bottom) + 8px);
+      z-index: 30;
+      display: grid; grid-template-columns: repeat(6, 1fr);
+      background: rgba(10,22,32,.98);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: .3rem;
+    }
+    nav.tabs button {
+      border: 0; background: transparent; border-radius: 14px; padding: .55rem .1rem;
+      font-size: .6rem; color: var(--muted); display: grid; gap: .1rem; place-items: center;
+      font-weight: 600;
+    }
+    nav.tabs button .ico { font-size: .95rem; line-height: 1; }
+    nav.tabs button.active { color: var(--accent2); background: rgba(76,201,240,.1); }
+    #loginGate {
+      position: fixed; inset: 0; background: rgba(3,8,12,.96); z-index: 50;
+      display: grid; place-items: center; padding: 1rem;
+    }
+    #loginGate .box { width: min(420px, 100%); }
+    #tradeSheet {
+      position: fixed; inset: 0; z-index: 40; display: none;
+      background: rgba(3,8,12,.72); padding: 1rem; align-items: end; justify-content: center;
+    }
+    #tradeSheet.open { display: flex; }
+    #tradeSheet .sheet {
+      width: min(520px, 100%); max-height: min(85vh, 640px); overflow: auto;
+      background: #102030; border: 1px solid var(--line); border-radius: 18px; padding: 1rem;
+    }
+    .kv { display: grid; grid-template-columns: 110px 1fr; gap: .3rem .55rem; font-size: .88rem; margin: .6rem 0; }
+    .kv .k { color: var(--muted); }
+    .hidden { display: none !important; }
+    #lastDecision { max-height: 7.5rem; overflow: auto; }
+  </style>
+</head>
+<body>
+  <div id="loginGate">
+    <div class="box brick">
+      <div class="brand" style="margin-bottom:.6rem">
+        <div class="logo"></div>
+        <h1 style="margin:0;font-size:1.35rem">AstraForge</h1>
+      </div>
+      <p class="muted" id="authHint">Вхід лише для власника бота</p>
+
+      <div id="stepBind" class="hidden">
+        <label class="label muted">Прив’яжи свою пошту (один раз)</label>
+        <input id="bindEmail" type="email" placeholder="you@email.com" />
+        <div style="height:.5rem"></div>
+        <input id="bindPass" type="password" placeholder="Тимчасовий пароль" />
+        <div style="height:.6rem"></div>
+        <button class="primary" style="width:100%" onclick="bindEmail()">Прив’язати пошту</button>
+      </div>
+
+      <div id="authTabs" class="chips hidden" style="margin-top:.2rem">
+        <button class="chip active" id="tabPass" onclick="showAuthTab('pass')">Пароль</button>
+        <button class="chip" id="tabOtp" onclick="showAuthTab('otp')">Код на пошту</button>
+      </div>
+
+      <div id="stepPass" class="hidden">
+        <input id="passEmail" type="email" placeholder="Твоя пошта" />
+        <div style="height:.5rem"></div>
+        <input id="passSecret" type="password" placeholder="Особистий пароль" />
+        <div style="height:.6rem"></div>
+        <button class="primary" style="width:100%" onclick="loginPassword()">Увійти</button>
+      </div>
+
+      <div id="stepOtp" class="hidden">
+        <input id="otpEmail" type="email" placeholder="Твоя пошта" />
+        <div style="height:.5rem"></div>
+        <button class="primary" style="width:100%" onclick="requestOtp()">Надіслати код</button>
+        <div style="height:.7rem"></div>
+        <input id="otpCode" inputmode="numeric" placeholder="Код з листа" />
+        <div style="height:.5rem"></div>
+        <button class="ok" style="width:100%" onclick="verifyOtp()">Увійти по коду</button>
+      </div>
+
+      <div id="stepLegacy" class="hidden">
+        <input id="password" type="password" placeholder="Пароль" />
+        <div style="height:.6rem"></div>
+        <button class="primary" style="width:100%" onclick="legacyLogin()">Увійти</button>
+      </div>
+      <p id="loginErr" class="muted"></p>
+    </div>
+  </div>
+
+  <header>
+    <div class="brand"><div class="logo"></div><h1>AstraForge</h1></div>
+    <span id="modePill" class="pill">—</span>
+  </header>
+
+  <main>
+    <div id="panel-home" class="panel active">
+      <div class="lego cols-4">
+        <div class="brick"><div class="label">Equity</div><div class="value" id="mEquity">—</div></div>
+        <div class="brick"><div class="label">PnL день</div><div class="value" id="mPnl">—</div></div>
+        <div class="brick"><div class="label">FX bucket</div><div class="value" id="mFx">—</div></div>
+        <div class="brick"><div class="label">Crypto hold</div><div class="value" id="mCry">—</div></div>
+      </div>
+      <section>
+        <h2>Прибуток / збиток</h2>
+        <div class="lego cols-4">
+          <div class="brick"><div class="label">Валюта +</div><div class="value pnl-plus" id="fxProfit">—</div></div>
+          <div class="brick"><div class="label">Валюта −</div><div class="value pnl-minus" id="fxLoss">—</div></div>
+          <div class="brick"><div class="label">Крипта +</div><div class="value pnl-plus" id="cryProfit">—</div></div>
+          <div class="brick"><div class="label">Крипта −</div><div class="value pnl-minus" id="cryLoss">—</div></div>
+        </div>
+        <div class="lego cols-4" style="margin-top:.55rem">
+          <div class="brick"><div class="label">FX net (день)</div><div class="value" id="fxNetDay">—</div></div>
+          <div class="brick"><div class="label">Crypto net (день)</div><div class="value" id="cryNetDay">—</div></div>
+          <div class="brick"><div class="label">FX net (всього)</div><div class="value" id="fxNetAll">—</div></div>
+          <div class="brick"><div class="label">Crypto net (всього)</div><div class="value" id="cryNetAll">—</div></div>
+        </div>
+      </section>
+      <section>
+        <h2>Керування</h2>
+        <div class="row">
+          <button class="ok" onclick="ctrl('resume')">▶ Старт</button>
+          <button onclick="ctrl('stop')">⏸ Стоп</button>
+          <button class="danger" onclick="ctrl('flatten')">💸 Продати все</button>
+          <button class="danger" onclick="ctrl('emergency')">🛑 Emergency</button>
+        </div>
+        <p id="ctrlMsg" class="muted"></p>
+      </section>
+      <section>
+        <h2>AI зараз</h2>
+        <div class="brick">
+          <div id="lastDecision" class="mono">—</div>
+          <div class="muted" id="breakerLine" style="margin-top:.5rem"></div>
+        </div>
+      </section>
+      <section>
+        <h2>FX слоти (ручне закриття мінусів)</h2>
+        <div class="brick scroll" id="fxSlots">—</div>
+      </section>
+      <section>
+        <h2>Біржові позиції</h2>
+        <div class="brick scroll" id="posTable">—</div>
+      </section>
+    </div>
+
+    <div id="panel-charts" class="panel">
+      <section>
+        <h2>Свічки</h2>
+        <div class="row">
+          <select id="symSelect" onchange="loadCandles()"></select>
+          <select id="tfSelect" onchange="loadCandles()">
+            <option value="1m">1m</option>
+            <option value="5m" selected>5m</option>
+            <option value="15m">15m</option>
+            <option value="1h">1h</option>
+          </select>
+          <button onclick="loadCandles()">Оновити</button>
+        </div>
+        <div style="height:.6rem"></div>
+        <canvas id="chart" width="800" height="220"></canvas>
+      </section>
+      <section>
+        <h2>Equity</h2>
+        <canvas id="equityChart" width="800" height="180"></canvas>
+      </section>
+    </div>
+
+    <div id="panel-history" class="panel">
+      <section>
+        <h2>Підсумок</h2>
+        <div class="lego cols-4">
+          <div class="brick"><div class="label">У плюс</div><div class="value pnl-plus" id="stWins">—</div></div>
+          <div class="brick"><div class="label">У мінус</div><div class="value pnl-minus" id="stLosses">—</div></div>
+          <div class="brick"><div class="label">Net</div><div class="value" id="stNet">—</div></div>
+          <div class="brick"><div class="label">Всього</div><div class="value" id="stTotal">—</div></div>
+        </div>
+      </section>
+      <section>
+        <h2>Історія</h2>
+        <div class="chips" id="tradeFilters">
+          <button class="chip active" data-f="all" onclick="setTradeFilter('all')">Усі</button>
+          <button class="chip" data-f="plus" onclick="setTradeFilter('plus')">У плюс</button>
+          <button class="chip" data-f="minus" onclick="setTradeFilter('minus')">У мінус</button>
+          <button class="chip" data-f="closed" onclick="setTradeFilter('closed')">Закриті</button>
+        </div>
+        <div class="brick scroll" id="tradesList">—</div>
+      </section>
+    </div>
+
+    <div id="panel-news" class="panel">
+      <section>
+        <h2>Світові крипто-новини</h2>
+        <p class="muted" style="margin:.2rem 0 .6rem">Масштабні події світу — українською: що дивитись на купівлю / що ризиково продати</p>
+        <button onclick="loadNews(true)">Оновити стрічку</button>
+        <div style="height:.6rem"></div>
+        <div class="brick scroll" id="newsList" style="max-height:70vh">Завантаження…</div>
+      </section>
+    </div>
+
+    <div id="panel-chat" class="panel">
+      <section>
+        <h2>AI чат + фото</h2>
+        <div id="chatBox"></div>
+        <div style="height:.5rem"></div>
+        <div class="composer">
+          <input id="chatInput" placeholder="Питай AI або опиши угоду…" onkeydown="if(event.key==='Enter')sendChat()" />
+          <button class="primary" onclick="sendChat()">➤</button>
+        </div>
+        <div style="height:.55rem"></div>
+        <div class="row">
+          <input id="photoInput" type="file" accept="image/*" capture="environment" />
+          <button onclick="sendPhoto()">Скинути фото AI</button>
+        </div>
+        <p class="muted">Можна скинути скрін графіка USD/CAD і спитати: купувати зараз чи чекати нижче.</p>
+      </section>
+    </div>
+
+    <div id="panel-settings" class="panel">
+      <section>
+        <h2>Конструктор блоків</h2>
+        <div class="brick">
+          <label class="muted">FX bucket USD</label>
+          <input id="sFxBucket" type="number" step="0.1" />
+          <div style="height:.5rem"></div>
+          <label class="muted">Crypto hold USD</label>
+          <input id="sCryBucket" type="number" step="0.1" />
+          <div style="height:.5rem"></div>
+          <label class="muted">Style</label>
+          <select id="sStyle">
+            <option value="fx_multi_scalp">fx_multi_scalp</option>
+            <option value="momentum_scalp">momentum_scalp</option>
+            <option value="swing">swing</option>
+          </select>
+          <div style="height:.5rem"></div>
+          <label class="muted">Symbols</label>
+          <textarea id="sSymbols" rows="3"></textarea>
+          <div style="height:.5rem"></div>
+          <label class="muted">Mode</label>
+          <select id="sMode"><option value="live">live</option><option value="paper">paper</option></select>
+        </div>
+      </section>
+      <section>
+        <button class="primary" style="width:100%" onclick="saveSettings()">💾 Зберегти блоки</button>
+        <p id="setMsg" class="muted"></p>
+      </section>
+    </div>
+  </main>
+
+  <nav class="tabs">
+    <button class="active" data-tab="home" onclick="tab('home')"><span class="ico">▣</span>Статус</button>
+    <button data-tab="charts" onclick="tab('charts')"><span class="ico">◫</span>Графік</button>
+    <button data-tab="history" onclick="tab('history')"><span class="ico">☰</span>Історія</button>
+    <button data-tab="news" onclick="tab('news')"><span class="ico">◎</span>Новини</button>
+    <button data-tab="chat" onclick="tab('chat')"><span class="ico">✦</span>AI</button>
+    <button data-tab="settings" onclick="tab('settings')"><span class="ico">⚙</span>Блоки</button>
+  </nav>
+
+  <div id="tradeSheet" onclick="if(event.target===this)closeTradeSheet()">
+    <div class="sheet" id="tradeSheetBody"></div>
+  </div>
+
+<script>
+let TOKEN = localStorage.getItem('astra_token') || '';
+let TRADE_FILTER = 'all';
+let TRADES_CACHE = {};
+let ACTIVE_TAB = 'home';
+let REFRESH_BUSY = false;
+let SYMBOLS_LOADED = false;
+let LAST_DECISION = '';
+const $ = (id) => document.getElementById(id);
+
+async function api(path, opts={}) {
+  const headers = Object.assign({}, opts.headers||{});
+  if (!(opts.body instanceof FormData)) headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  if (TOKEN) headers['X-Astra-Token'] = TOKEN;
+  const r = await fetch(path, Object.assign({}, opts, {headers}));
+  if (r.status === 401) { showLogin(); throw new Error('auth'); }
+  const data = await r.json().catch(()=>({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+function showLogin(){ $('loginGate').style.display='grid'; }
+function hideLogin(){ $('loginGate').style.display='none'; }
+
+async function initAuth(){
+  const s = await fetch('/api/auth/status').then(r=>r.json());
+  $('stepBind').classList.add('hidden');
+  $('stepOtp').classList.add('hidden');
+  $('stepPass').classList.add('hidden');
+  $('stepLegacy').classList.add('hidden');
+  $('authTabs').classList.add('hidden');
+  if(!s.owner_bound){
+    $('authHint').textContent = 'Спочатку прив’яжи свою пошту — лише вона зможе відкрити бота';
+    $('stepBind').classList.remove('hidden');
+  } else {
+    $('authHint').textContent = 'Вхід тільки для ' + (s.owner_hint||'власника');
+    $('authTabs').classList.remove('hidden');
+    $('passEmail').value = $('passEmail').value || '';
+    $('otpEmail').value = $('otpEmail').value || '';
+    if(s.password_login){ showAuthTab('pass'); }
+    else { showAuthTab('otp'); }
+  }
+}
+function showAuthTab(name){
+  $('stepPass').classList.toggle('hidden', name!=='pass');
+  $('stepOtp').classList.toggle('hidden', name!=='otp');
+  $('tabPass').classList.toggle('active', name==='pass');
+  $('tabOtp').classList.toggle('active', name==='otp');
+}
+
+async function passwordLogin(){
+  try{
+    const r = await api('/api/auth/login-password', {method:'POST', body: JSON.stringify({email:$('passEmail').value, password:$('passSecret').value})});
+    TOKEN = r.token; localStorage.setItem('astra_token', TOKEN);
+    hideLogin(); refreshAll();
+  }catch(e){ $('loginErr').textContent = 'Невірний email або пароль'; }
+}
+async function bindEmail(){
+  try{
+    await api('/api/auth/bind-email', {method:'POST', body: JSON.stringify({email:$('bindEmail').value, password:$('bindPass').value})});
+    $('loginErr').textContent = 'Пошту прив’язано. Увійди паролем.';
+    await initAuth();
+    $('otpEmail').value = $('bindEmail').value;
+  }catch(e){ $('loginErr').textContent = 'Помилка: '+e.message; }
+}
+async function requestOtp(){
+  try{
+    const r = await api('/api/auth/request-otp', {method:'POST', body: JSON.stringify({email:$('otpEmail').value})});
+    $('loginErr').textContent = r.message + (r.warning?(' · '+r.warning):'');
+  }catch(e){ $('loginErr').textContent = 'Помилка: '+e.message; }
+}
+async function verifyOtp(){
+  try{
+    const r = await api('/api/auth/verify-otp', {method:'POST', body: JSON.stringify({email:$('otpEmail').value, code:$('otpCode').value})});
+    TOKEN = r.token; localStorage.setItem('astra_token', TOKEN);
+    hideLogin(); refreshAll();
+  }catch(e){ $('loginErr').textContent = 'Невірний код'; }
+}
+async function legacyLogin(){
+  try{
+    const r = await api('/api/login', {method:'POST', body: JSON.stringify({password:$('password').value})});
+    TOKEN = r.token; localStorage.setItem('astra_token', TOKEN);
+    hideLogin(); refreshAll();
+  }catch(e){ $('loginErr').textContent = 'Невірний пароль / потрібна пошта'; }
+}
+
+function tab(name){
+  ACTIVE_TAB = name;
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
+  $('panel-'+name).classList.add('active');
+  const btn = document.querySelector(`nav.tabs button[data-tab="${name}"]`);
+  if (btn) btn.classList.add('active');
+  if(name==='charts'){ loadCandles(); loadEquity(); }
+  if(name==='history'){ loadHistory(); }
+  if(name==='news'){ loadNews(); }
+  if(name==='chat'){ loadChat(); }
+  if(name==='settings'){ loadSettings(); }
+  if(name==='home'){ refreshStatus({deep:true}).catch(()=>{}); }
+}
+
+function money(n){ const v=Number(n||0); return (v>0?'+':'') + '$' + v.toFixed(4); }
+function fmtTime(iso){
+  if(!iso) return '—';
+  try{ const d=new Date(iso); return d.toISOString().replace('T',' ').slice(0,19)+' UTC'; }catch(e){ return String(iso).slice(0,19); }
+}
+function setTxt(id, text){
+  const el = $(id); if(!el) return;
+  if (el.textContent !== text) el.textContent = text;
+}
+function setMoney(id, v, forceClass){
+  const el = $(id); if(!el) return;
+  const n = Number(v||0);
+  const text = money(n);
+  const cls = 'value ' + (forceClass || (n>=0?'pnl-plus':'pnl-minus'));
+  if (el.textContent !== text) el.textContent = text;
+  if (el.className !== cls) el.className = cls;
+}
+function renderSlots(slots){
+  const html = (slots||[]).map(sl=>`<div class="slot-item">
+    <div>
+      <div><b>${sl.symbol}</b> · entry ${sl.entry}</div>
+      <div class="muted mono">${sl.id} · ${fmtTime(sl.opened_at)}</div>
+    </div>
+    <button class="danger" onclick="closeSlot('${sl.id}')">Закрити</button>
+  </div>`).join('') || 'Немає відкритих FX слотів';
+  if ($('fxSlots').innerHTML !== html) $('fxSlots').innerHTML = html;
+}
+
+async function refreshStatus(opts={}){
+  if (REFRESH_BUSY) return;
+  REFRESH_BUSY = true;
+  try{
+    const deep = !!opts.deep;
+    const s = await api('/api/status?light=1');
+    setTxt('mEquity', '$' + Number(s.equity||0).toFixed(2));
+    setMoney('mPnl', s.pnl_today);
+    const b = s.buckets||{};
+    setTxt('mFx', '$' + Number(b.fx_bucket_usd||0).toFixed(2));
+    setTxt('mCry', '$' + Number(b.crypto_hold_usd||0).toFixed(2));
+    const split = s.pnl_split || {};
+    setMoney('fxProfit', split.fx_profit_total, 'pnl-plus');
+    setTxt('fxLoss', '-$' + Number(split.fx_loss_total||0).toFixed(4));
+    $('fxLoss').className = 'value pnl-minus';
+    setMoney('cryProfit', split.crypto_profit_total, 'pnl-plus');
+    setTxt('cryLoss', '-$' + Number(split.crypto_loss_total||0).toFixed(4));
+    $('cryLoss').className = 'value pnl-minus';
+    setMoney('fxNetDay', split.daily_fx_pnl);
+    setMoney('cryNetDay', split.daily_crypto_pnl);
+    setMoney('fxNetAll', split.fx_net_total);
+    setMoney('cryNetAll', split.crypto_net_total);
+    setTxt('modePill', `${s.mode||'—'} · ${s.exchange_id||''}`);
+    $('modePill').className = 'pill ' + (s.trading_enabled ? 'on':'off');
+    const decision = s.last_decision_summary || '—';
+    if (decision !== LAST_DECISION) {
+      LAST_DECISION = decision;
+      setTxt('lastDecision', decision);
+    }
+    setTxt('breakerLine', s.circuit_breaker_active ? ('Breaker: '+(s.circuit_breaker_reason||'')) : 'Breaker: ok');
+    renderSlots(s.fx_slots || b.open_slots || []);
+
+    if (deep && ACTIVE_TAB === 'home') {
+      try {
+        const p = await api('/api/positions');
+        const posHtml = (p.positions||[]).map(x=>`<div class="mono">${x.symbol} ${x.side} · uPnL ${money(x.unrealized_pnl)} · ${Number(x.size).toFixed(6)}</div>`).join('') || 'Немає';
+        if ($('posTable').innerHTML !== posHtml) $('posTable').innerHTML = posHtml;
+        if (p.fx_slots) renderSlots(p.fx_slots);
+      } catch(_e) {}
+    }
+    if (!SYMBOLS_LOADED) {
+      try {
+        const syms = await api('/api/symbols');
+        const all=[...(syms.fx_pairs||[]), ...(syms.symbols||[])];
+        const sel = $('symSelect');
+        if (sel && sel.options.length===0) {
+          [...new Set(all)].forEach(sy=>{
+            const o=document.createElement('option'); o.value=sy; o.textContent=sy; sel.appendChild(o);
+          });
+        }
+        SYMBOLS_LOADED = true;
+      } catch(_e) {}
+    }
+  } finally {
+    REFRESH_BUSY = false;
+  }
+}
+async function closeSlot(id){
+  if(!confirm('Закрити цей FX слот вручну?')) return;
+  try{
+    const r = await api('/api/fx/close-slot', {method:'POST', body: JSON.stringify({slot_id:id})});
+    $('ctrlMsg').textContent = 'Закрито · PnL '+money(r.pnl);
+    refreshStatus({deep:true});
+  }catch(e){ $('ctrlMsg').textContent = e.message; }
+}
+async function ctrl(action){
+  try{ const r=await api('/api/control/'+action,{method:'POST'}); $('ctrlMsg').textContent=r.message||'ok'; refreshStatus({deep:true}); }
+  catch(e){ $('ctrlMsg').textContent=e.message; }
+}
+
+function setTradeFilter(f){ TRADE_FILTER=f; document.querySelectorAll('#tradeFilters .chip').forEach(c=>c.classList.toggle('active', c.dataset.f===f)); loadHistory(); }
+async function loadHistory(){
+  const t = await api(`/api/trades?result=${encodeURIComponent(TRADE_FILTER)}&limit=120`);
+  const st=t.stats||{};
+  $('stWins').textContent = `${st.wins||0} · ${money(st.gross_profit||0)}`;
+  $('stLosses').textContent = `${st.losses||0} · ${money(st.gross_loss||0)}`;
+  const net=Number(st.net_pnl||0); $('stNet').textContent=money(net); $('stNet').className='value '+(net>=0?'pnl-plus':'pnl-minus');
+  $('stTotal').textContent=String(st.total||0);
+  TRADES_CACHE={}; (t.trades||[]).forEach(x=>{ if(x.id!=null) TRADES_CACHE[x.id]=x; });
+  $('tradesList').innerHTML=(t.trades||[]).map(x=>`<div class="trade-item" onclick="openTrade(${x.id})">
+    <div><div><b>${x.symbol}</b> · ${x.result_label}</div><div class="muted">${fmtTime(x.created_at)} · ${x.action}</div></div>
+    <div class="${x.result==='plus'?'pnl-plus':x.result==='minus'?'pnl-minus':'muted'}">${x.result==='open'?'open':money(x.pnl)}</div>
+  </div>`).join('') || 'Порожньо';
+}
+async function openTrade(id){
+  let t = TRADES_CACHE[id] || (await api('/api/trades/'+id)).trade;
+  $('tradeSheetBody').innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><div><b>${t.symbol}</b><div class="muted">${t.result_label}</div></div><button onclick="closeTradeSheet()">Закрити</button></div>
+  <div class="kv">
+    <div class="k">PnL</div><div class="v ${t.result==='plus'?'pnl-plus':t.result==='minus'?'pnl-minus':''}">${money(t.pnl)}</div>
+    <div class="k">Size</div><div class="v">${t.size}</div>
+    <div class="k">Ціна</div><div class="v">${t.price}</div>
+    <div class="k">Час</div><div class="v">${fmtTime(t.created_at)}</div>
+    <div class="k">AI</div><div class="v">${(t.reasoning||'—').replace(/</g,'&lt;')}</div>
+  </div>`;
+  $('tradeSheet').classList.add('open');
+}
+function closeTradeSheet(){ $('tradeSheet').classList.remove('open'); }
+
+async function loadNews(force){
+  $('newsList').innerHTML = 'Завантаження…';
+  const r = await api('/api/news?limit=16' + (force ? '&refresh=1' : ''));
+  const badge = (a, label) => {
+    const color = a==='buy_watch' ? '#3dffa8' : a==='sell_risk' ? '#ff6b7a' : a==='hold' ? '#7ec8ff' : '#9aa4b2';
+    return `<span style="display:inline-block;margin-top:.35rem;padding:.15rem .45rem;border-radius:8px;font-size:.72rem;font-weight:700;background:rgba(255,255,255,.06);color:${color}">${label||'Спостерігати'}</span>`;
+  };
+  $('newsList').innerHTML = (r.news||[]).map(n=>`<a class="news-item" href="${n.url||'#'}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">
+    <div>
+      <div><b>${n.title||''}</b></div>
+      <div class="muted">${n.source||''}</div>
+      <div style="margin-top:.25rem">${n.summary||''}</div>
+      ${badge(n.action, n.action_uk)}
+    </div>
+  </a>`).join('') || 'Немає новин';
+}
+
+async function loadChat(){
+  const r = await api('/api/chat/history');
+  $('chatBox').innerHTML='';
+  (r.history||[]).forEach(m=>appendMsg(m.role==='user'?'user':'bot', m.text));
+}
+function appendMsg(role,text){ const d=document.createElement('div'); d.className='msg '+role; d.textContent=text; $('chatBox').appendChild(d); $('chatBox').scrollTop=$('chatBox').scrollHeight; }
+async function sendChat(){
+  const msg=$('chatInput').value.trim(); if(!msg) return;
+  $('chatInput').value=''; appendMsg('user', msg);
+  const r=await api('/api/chat',{method:'POST', body:JSON.stringify({message:msg})});
+  appendMsg('bot', r.reply||'—');
+}
+async function sendPhoto(){
+  const f=$('photoInput').files[0]; if(!f){ alert('Обери фото'); return; }
+  const fd=new FormData();
+  fd.append('image', f);
+  fd.append('message', $('chatInput').value || 'Проаналізуй цей скрін: купувати зараз чи чекати нижче?');
+  appendMsg('user', '[фото] '+f.name);
+  const r=await api('/api/chat/vision',{method:'POST', body:fd, headers:{}});
+  appendMsg('bot', r.reply||'—');
+}
+
+async function loadCandles(){
+  const symbol=$('symSelect').value; if(!symbol) return;
+  const data=await api(`/api/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${$('tfSelect').value}&limit=60`);
+  drawCandles($('chart'), data.candles||[]);
+}
+async function loadEquity(){
+  const data=await api('/api/equity');
+  drawLine($('equityChart'), (data.points||[]).map(p=>Number(p.equity)));
+}
+function drawCandles(canvas, candles){
+  const ctx=canvas.getContext('2d'); const w=canvas.width,h=canvas.height; ctx.clearRect(0,0,w,h);
+  if(!candles.length) return;
+  const min=Math.min(...candles.map(c=>c.l)), max=Math.max(...candles.map(c=>c.h)), span=(max-min)||1, bw=w/candles.length;
+  candles.forEach((c,i)=>{
+    const x=i*bw+bw*0.5, yH=h-((c.h-min)/span)*(h-20)-10, yL=h-((c.l-min)/span)*(h-20)-10, yO=h-((c.o-min)/span)*(h-20)-10, yC=h-((c.c-min)/span)*(h-20)-10;
+    const up=c.c>=c.o; ctx.strokeStyle=up?'#3dd68c':'#ff5d6c'; ctx.beginPath(); ctx.moveTo(x,yH); ctx.lineTo(x,yL); ctx.stroke();
+    ctx.fillStyle=up?'#3dd68c':'#ff5d6c'; const top=Math.min(yO,yC), bot=Math.max(yO,yC); ctx.fillRect(x-bw*0.3, top, bw*0.6, Math.max(1,bot-top));
+  });
+}
+function drawLine(canvas, values){
+  const ctx=canvas.getContext('2d'); const w=canvas.width,h=canvas.height; ctx.clearRect(0,0,w,h);
+  if(values.length<2) return; const min=Math.min(...values), max=Math.max(...values), span=(max-min)||1;
+  ctx.strokeStyle='#4cc9f0'; ctx.lineWidth=2; ctx.beginPath();
+  values.forEach((v,i)=>{ const x=i/(values.length-1)*w, y=h-((v-min)/span)*(h-20)-10; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+  ctx.stroke();
+}
+
+async function loadSettings(){
+  const s=await api('/api/settings');
+  $('sFxBucket').value=s.fx_bucket_usd??20;
+  $('sCryBucket').value=s.crypto_hold_usd??8;
+  $('sStyle').value=s.trading_style||'fx_multi_scalp';
+  $('sSymbols').value=s.trade_symbols||'';
+  $('sMode').value=s.trading_mode||'live';
+}
+async function saveSettings(){
+  try{
+    await api('/api/settings',{method:'POST', body:JSON.stringify({
+      fx_bucket_usd:Number($('sFxBucket').value),
+      crypto_bucket_usd:Number($('sCryBucket').value),
+      trading_style:$('sStyle').value,
+      trade_symbols:$('sSymbols').value,
+      trading_mode:$('sMode').value,
+      live_confirmed:true
+    })});
+    $('setMsg').textContent='Збережено';
+  }catch(e){ $('setMsg').textContent=e.message; }
+}
+
+async function refreshAll(){ try{ await refreshStatus({deep:true}); hideLogin(); } catch(e){ if(String(e.message).includes('auth')) showLogin(); } }
+
+(async function boot(){
+  await initAuth();
+  if(TOKEN){ hideLogin(); refreshAll(); } else { showLogin(); }
+  // Light poll (no Kraken): every 12s. Deep positions: every 35s only on home tab.
+  setInterval(()=>{ if(TOKEN) refreshStatus({deep:false}).catch(()=>{}); }, 12000);
+  setInterval(()=>{ if(TOKEN && ACTIVE_TAB==='home') refreshStatus({deep:true}).catch(()=>{}); }, 35000);
+  document.addEventListener('visibilitychange', ()=>{
+    if (!document.hidden && TOKEN) refreshStatus({deep: ACTIVE_TAB==='home'}).catch(()=>{});
+  });
+})();
+</script>
+</body>
+</html>
