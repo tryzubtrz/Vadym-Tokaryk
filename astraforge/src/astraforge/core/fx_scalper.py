@@ -168,16 +168,39 @@ class FxMultiScalper:
                 return {"action": "buy_now", "symbol": best["symbol"], "reason": f"fallback:{exc}"}
             return {"action": "wait", "symbol": None, "reason": f"fallback_wait:{exc}"}
 
-    async def manage_open_slots(self) -> list[dict[str, Any]]:
-        """FX exits: >=0.04% close now; smaller green waits up to 2 minutes.
+    def _taker_fee_pct(self, symbol: str) -> float:
+        """Exchange taker fee in percent (e.g. 0.2 for 20 bps)."""
+        try:
+            raw = getattr(self.exchange, "_exchange", None)
+            market = (getattr(raw, "markets", None) or {}).get(symbol) or {}
+            taker = float(market.get("taker") or 0.0)
+            if taker > 0:
+                return taker * 100.0
+        except Exception:  # noqa: BLE001
+            pass
+        # Kraken spot default if markets missing
+        if bool(getattr(self.settings, "zero_fee_mode", False)):
+            return 0.0
+        return 0.2
 
-        Long exit marks use *bid* (executable sell), not last — last often sits
-        inside the spread and falsely looks red, so slots never rotate.
+    def _round_trip_cost_pct(self, symbol: str, *, bid: float, ask: float) -> float:
+        """Min move (%) to break even after buy+sell fees and live spread."""
+        fee = self._taker_fee_pct(symbol)
+        mid = (bid + ask) / 2.0 if bid > 0 and ask > 0 else 0.0
+        spread = ((ask - bid) / mid * 100.0) if mid > 0 else 0.0
+        # small buffer for adverse selection / partial fills
+        return (2.0 * fee) + max(0.0, spread) + 0.02
+
+    async def manage_open_slots(self) -> list[dict[str, Any]]:
+        """FX exits — ONLY when net edge clears fees. Tiny 'green' on bid still loses money.
+
+        Kraken charges ~0.2% per side. Closing at +0.04% crystallizes a ~0.36% loss.
+        If we cannot exit net-green, absorb USD as cash instead of paying another fee.
         """
         results: list[dict[str, Any]] = []
         slots = list(self.store.data.get("open_slots") or [])
         now = datetime.now(timezone.utc)
-        instant_tp = float(self.store.data.get("fx_instant_tp_pct") or 0.04)
+        configured_tp = float(self.store.data.get("fx_instant_tp_pct") or 0.04)
         max_hold_green = float(self.store.data.get("max_hold_sec_green") or 120)
         max_hold_be = float(self.store.data.get("max_hold_sec_force_be") or 300)
         for slot in slots:
@@ -189,7 +212,6 @@ class FxMultiScalper:
                 last = float(t.get("last") or t.get("close") or 0)
                 bid = float(t.get("bid") or 0)
                 ask = float(t.get("ask") or 0)
-                # Executable close price for a long spot sell
                 px = bid if bid > 0 else last
                 mark = last if last > 0 else px
             except Exception as exc:  # noqa: BLE001
@@ -198,6 +220,12 @@ class FxMultiScalper:
             if px <= 0 or entry <= 0:
                 continue
             pnl_pct = ((px - entry) / entry) * 100.0
+            min_net = max(configured_tp, self._round_trip_cost_pct(symbol, bid=bid or px, ask=ask or px))
+            # Approx net after one more taker fee on the sell
+            sell_fee = self._taker_fee_pct(symbol)
+            # Entry already paid buy fee; require bid move to cover sell fee + leftover buy drag
+            # Conservative: require full round-trip from entry mark
+            net_pct = pnl_pct - sell_fee
             emergency = float(slot.get("emergency_stop") or 0)
             age_sec = 0.0
             try:
@@ -208,22 +236,38 @@ class FxMultiScalper:
 
             action = None
             reason = ""
-            # Emergency still uses mark/last (crash detection)
             if emergency and mark <= emergency:
                 action = "emergency_stop"
                 reason = f"yearly-low emergency stop hit @ {mark}"
-            elif pnl_pct >= instant_tp:
-                # Priority: 0.04%+ on bid → close immediately and rotate
+            elif pnl_pct >= min_net:
                 action = "pct_tp"
-                reason = f"+{pnl_pct:.4f}% >= {instant_tp:.2f}% — close now"
-            elif age_sec >= max_hold_green and px >= entry:
-                # Any green (or flat) on bid after 2 min → take it / free capital
-                action = "time_green"
-                reason = f"held {age_sec:.0f}s bid {pnl_pct:+.4f}% (<{instant_tp:.2f}%) — rotate"
-            elif age_sec >= max_hold_be and px >= entry * 0.9999:
-                # After 5 min: free capital if within ~1 pip of entry on bid
-                action = "time_be"
-                reason = f"held {age_sec:.0f}s near entry on bid — free capital"
+                reason = f"+{pnl_pct:.4f}% >= fee-aware min {min_net:.2f}% — close net"
+            elif age_sec >= max_hold_be and pnl_pct < min_net:
+                # Do NOT sell into fees. USD from USD/CAD is already cash — drop slot bookkeeping.
+                self.store.remove_slot(slot["id"])
+                results.append(
+                    {
+                        "ok": True,
+                        "action": "absorb_cash",
+                        "symbol": symbol,
+                        "pnl": 0.0,
+                        "pnl_pct": pnl_pct,
+                        "age_sec": age_sec,
+                        "reason": (
+                            f"held {age_sec:.0f}s; bid {pnl_pct:+.4f}% < fee-min {min_net:.2f}% "
+                            f"— keep as cash, skip fee close"
+                        ),
+                    }
+                )
+                logger.info(
+                    "fx_slot_absorbed",
+                    symbol=symbol,
+                    pnl_pct=pnl_pct,
+                    min_net=min_net,
+                    age_sec=age_sec,
+                )
+                continue
+
             if not action:
                 results.append(
                     {
@@ -231,38 +275,41 @@ class FxMultiScalper:
                         "action": "hold",
                         "symbol": symbol,
                         "pnl_pct": pnl_pct,
+                        "net_pct": net_pct,
+                        "min_net": min_net,
                         "age_sec": age_sec,
                         "bid": px,
                         "entry": entry,
                         "held": True,
+                        "reason": f"need +{min_net:.2f}% after fees (now {pnl_pct:+.3f}%)",
                     }
                 )
                 continue
-            if action != "emergency_stop" and px < entry * 0.9999:
-                results.append(
-                    {
-                        "ok": True,
-                        "action": "hold",
-                        "symbol": symbol,
-                        "pnl_pct": pnl_pct,
-                        "age_sec": age_sec,
-                        "bid": px,
-                        "entry": entry,
-                        "held": True,
-                        "reason": "still_red_on_bid",
-                    }
-                )
-                continue
+
             try:
                 order = await self.exchange.create_market_order(symbol, "sell", amount, reduce_only=True)
             except Exception as exc:  # noqa: BLE001
                 results.append({"ok": False, "symbol": symbol, "error": str(exc)})
                 continue
             fill = float(order.get("average") or order.get("price") or px)
+            fee_cost = 0.0
+            fee = order.get("fee") or {}
+            try:
+                fee_cost = float(fee.get("cost") or 0)
+                fee_ccy = str(fee.get("currency") or "")
+                if fee_cost and fee_ccy == "CAD" and fill > 0:
+                    fee_cost = fee_cost / fill
+                elif fee_cost and fee_ccy not in {"USD", "USDT", "USDC", ""}:
+                    # leave as-is best effort
+                    pass
+            except Exception:  # noqa: BLE001
+                fee_cost = amount * fill * (sell_fee / 100.0) if symbol.endswith("/USD") else (
+                    amount * (sell_fee / 100.0)
+                )
             realized = (fill - entry) * amount
-            # USD/CAD & EUR/CAD PnL is in CAD → convert to USD
             if symbol.endswith("/CAD") and fill > 0:
                 realized = realized / fill
+            realized -= abs(fee_cost)
             self.store.remove_slot(slot["id"])
             self.store.record_fx_profit(realized)
             results.append(
@@ -295,6 +342,19 @@ class FxMultiScalper:
         max_slots = int(snap.get("max_slots") or 10)
         if open_n >= max_slots or fx_cap < 4:
             return {"skipped": True, "reason": "no_slot_capacity_or_capital"}
+
+        # Hard block: paid-fee accounts cannot scalp 0.04% — each round trip loses money.
+        if not bool(getattr(self.settings, "zero_fee_mode", False)):
+            sample = "USD/CAD"
+            fee = self._taker_fee_pct(sample)
+            if fee >= 0.05:  # >= 5 bps per side
+                return {
+                    "skipped": True,
+                    "reason": (
+                        f"fees_block_scalp: taker {fee:.2f}%/side "
+                        f"(~{2*fee:.2f}% round-trip). Enable real zero-fee or pause FX scalp."
+                    ),
+                }
 
         cash_usd = float(available_usd) if available_usd is not None else float(
             await self.exchange.free_balance("USD")

@@ -29,8 +29,8 @@ os.environ.setdefault("CANDLE_TIMEFRAME", "5m")
 os.environ.setdefault("AGENT_LOOP_INTERVAL_SEC", "20")
 os.environ.setdefault("MAX_POSITION_PCT", "30")
 os.environ.setdefault("MAX_OPEN_POSITIONS", "10")
-os.environ.setdefault("ZERO_FEE_MODE", "true")
-os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.04")
+os.environ["ZERO_FEE_MODE"] = "false"
+os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.50")
 os.environ.setdefault("FX_BUCKET_USD", "26.5")
 os.environ.setdefault("CRYPTO_BUCKET_USD", "0")
 # Force 7% — .env may still say 6.0 from pre-FX-only days
@@ -70,8 +70,8 @@ async def main() -> None:
         max_position_pct=float(os.getenv("MAX_POSITION_PCT", "30")),
         max_open_positions=int(os.getenv("MAX_OPEN_POSITIONS", "10")),
         max_leverage=1.0,
-        zero_fee_mode=os.getenv("ZERO_FEE_MODE", "true").lower() in {"1", "true", "yes"},
-        min_take_profit_pct=float(os.getenv("MIN_TAKE_PROFIT_PCT", "0.12")),
+        zero_fee_mode=os.getenv("ZERO_FEE_MODE", "false").lower() in {"1", "true", "yes"},
+        min_take_profit_pct=float(os.getenv("MIN_TAKE_PROFIT_PCT", "0.50")),
         fx_bucket_usd=float(os.getenv("FX_BUCKET_USD", "26.5")),
         crypto_bucket_usd=float(os.getenv("CRYPTO_BUCKET_USD", "0")),
         max_drawdown_pct=float(os.getenv("MAX_DRAWDOWN_PCT", "7")),
@@ -102,7 +102,8 @@ async def main() -> None:
     serve_task = asyncio.create_task(server.serve(), name="dashboard")
 
     await engine.start()
-    await engine.state.save_status_fields(trading_enabled=True)
+    # SAFETY: fee-paying Kraken scalp was burning equity — start paused until owner resumes
+    await engine.state.save_status_fields(trading_enabled=False)
     try:
         await engine.breaker.reset(force_daily=True)
         peak = float(await engine.state.get_kv("peak_equity", 0) or 0)
@@ -124,6 +125,10 @@ async def main() -> None:
         engine.buckets.data["profit_to_crypto_pct"] = 0.0
         engine.buckets.data["crypto_hold_usd"] = 0.0
         engine.buckets.data["pending_crypto_buy_usd"] = 0.0
+        # Fee-aware TP floor (~0.45%+ with 0.2% Kraken taker each side)
+        engine.buckets.data["fx_instant_tp_pct"] = max(
+            float(engine.buckets.data.get("fx_instant_tp_pct") or 0), 0.50
+        )
         engine.buckets.save()
     except Exception as exc:  # noqa: BLE001
         print(f"bucket FX-only soft-fail: {exc}", flush=True)
@@ -137,7 +142,13 @@ async def main() -> None:
             engine.risk.restore_peak(acc.equity, force=True)
             print(f"peak_equity recalibrated to {acc.equity:.4f} (was {peak:.4f})", flush=True)
         await engine.breaker.reset(force_daily=True)
-        await engine.state.save_status_fields(trading_enabled=True)
+        # Keep trading PAUSED — owner must press Resume after understanding fees
+        await engine.state.save_status_fields(trading_enabled=False)
+        print(
+            "SAFETY PAUSE: Kraken taker ~0.2%/side. Tiny FX scalp was losing money. "
+            "Resume only when ready; opens stay blocked while fees >= 0.05%/side.",
+            flush=True,
+        )
     except Exception as exc:  # noqa: BLE001
         print(f"peak recalibrate soft-fail: {exc}", flush=True)
 

@@ -243,12 +243,26 @@ class TradingEngine:
         if fx_style and self.buckets.open_slot_count() > 0:
             try:
                 closed_only = await self.fx.manage_open_slots()
-                closed_ok = [c for c in (closed_only or []) if c.get("ok")]
-                if closed_ok:
+                closed_ok = [
+                    c
+                    for c in (closed_only or [])
+                    if c.get("ok") and not c.get("held") and c.get("action") != "hold"
+                ]
+                holds = [
+                    c
+                    for c in (closed_only or [])
+                    if c.get("ok") and (c.get("held") or c.get("action") == "hold")
+                ]
+                if closed_ok or holds:
                     parts = [
                         f"FX close {c.get('symbol')} pnl={float(c.get('pnl') or 0):+.4f}"
                         for c in closed_ok
                     ]
+                    parts.extend(
+                        f"FX hold {c.get('symbol')} {float(c.get('pnl_pct') or 0):+.3f}% "
+                        f"{float(c.get('age_sec') or 0):.0f}s"
+                        for c in holds
+                    )
                     self._last_status_summary = " | ".join(parts)
                     logger.info("fx_manage_while_paused", summary=self._last_status_summary)
             except Exception as exc:  # noqa: BLE001
@@ -285,9 +299,17 @@ class TradingEngine:
                         parts.append(f"FX err {c.get('symbol')}:{c.get('error')}")
                     continue
                 if c.get("held") or c.get("action") == "hold":
+                    need = c.get("reason") or ""
                     parts.append(
                         f"FX hold {c.get('symbol')} {float(c.get('pnl_pct') or 0):+.3f}% "
                         f"{float(c.get('age_sec') or 0):.0f}s"
+                        + (f" ({need[:48]})" if need else "")
+                    )
+                    continue
+                if c.get("action") == "absorb_cash":
+                    parts.append(
+                        f"FX absorb {c.get('symbol')} keep-cash "
+                        f"{float(c.get('pnl_pct') or 0):+.3f}%"
                     )
                     continue
                 parts.append(

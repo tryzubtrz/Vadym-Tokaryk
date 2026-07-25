@@ -74,8 +74,8 @@ class Settings(BaseSettings):
     candle_timeframe: str = "5m"
     agent_loop_interval_sec: int = 30
     # Kraken promo / zero-fee accounts: allow tiny take-profits
-    zero_fee_mode: bool = True
-    min_take_profit_pct: float = 0.04  # close tiny green fast — don't wait long
+    zero_fee_mode: bool = False
+    min_take_profit_pct: float = 0.50  # must beat ~0.4% round-trip fees
     # FX buckets
     fx_bucket_usd: float = 26.5
     crypto_bucket_usd: float = 0.0
