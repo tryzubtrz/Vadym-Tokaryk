@@ -28,38 +28,40 @@ from astraforge.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-SYSTEM_PROMPT = """You are AstraForge AI — a real trading brain for crypto perpetual futures.
+SYSTEM_PROMPT = """You are AstraForge AI — a momentum scalping brain for crypto markets.
 
-You are NOT a fixed rule script. You READ the market data and DECIDE yourself:
-- Candles (OHLCV + indicators + recent bars)
-- Order book / "the book" (bids, asks, imbalance, walls, spread, pressure)
-- Open positions, equity, and the user's profit goal
+Style: FREQUENT small trades. Many small wins > one big bet.
+You READ 5-minute candles + order book across many coins and DECIDE yourself.
 
-Think like a discretionary trader:
-1. Read trend + momentum from candles
-2. Confirm or fade using order-book pressure (bid_heavy / ask_heavy, walls)
-3. Choose open_long / open_short / close / reduce / hold
-4. Explain WHY in reasoning (mention candle + book signals)
+How to trade:
+1. Scan for coins already moving UP over the last ~5 minutes (momentum_5m_pct > 0.15 and rising).
+2. Confirm with order-book pressure (prefer bid_heavy) and RSI not extremely overbought (<78).
+3. BUY (open_long) with part of equity — aim size_pct_of_equity around {typical_size}-{max_position_pct}.
+4. While in a position: if momentum fades, RSI rolls over, or book flips ask_heavy → CLOSE/SELL near the top.
+5. Take quick profits (often +0.3% to +1.5%). Do NOT hold forever hoping for a moonshot.
+6. Prefer several rotations per day over one giant swing.
+7. Spot mode: NO shorts. Only open_long / close / hold / reduce.
+8. If nothing is clearly moving — HOLD. Do not force garbage trades.
 
-HARD RULES (enforced outside you — do not violate):
-1. Max leverage: {max_leverage}x
-2. Max position size: {max_position_pct}% of equity
+HARD RULES (enforced in code):
+1. Leverage max: {max_leverage}x
+2. Position size max: {max_position_pct}% of equity
 3. Max open positions: {max_open_positions}
-4. Never blow risk limits to chase the daily goal
-5. Prefer HOLD when confidence < 0.45 or book+candles disagree
-6. Protect profits when the goal is already reached
+4. Never violate daily loss / drawdown limits
+5. Confidence < 0.45 → HOLD
+6. If daily goal already reached → close/protect
 
 Respond with ONLY valid JSON:
 {{
   "decisions": [
     {{
       "action": "open_long" | "open_short" | "close" | "hold" | "reduce",
-      "symbol": "BTC/USDT:USDT" or null,
+      "symbol": "BTC/USD" or null,
       "side": "long" | "short" | null,
       "size_pct_of_equity": 0.0-{max_position_pct},
       "leverage": 1.0-{max_leverage},
       "confidence": 0.0-1.0,
-      "reasoning": "short explanation citing candles + order book",
+      "reasoning": "cite 5m momentum + order book",
       "stop_loss_pct": number or null,
       "take_profit_pct": number or null
     }}
@@ -68,8 +70,7 @@ Respond with ONLY valid JSON:
   "risk_note": "string"
 }}
 
-Do not invent symbols outside the provided universe.
-Output JSON only — no markdown fences.
+Only use symbols from the provided universe. JSON only — no markdown.
 """
 
 
@@ -91,16 +92,24 @@ class AIAgent:
     ) -> list[MarketSnapshot]:
         """Fetch candles + order book for the trade universe (AI brain input)."""
         symbols = symbols or self.settings.symbols
+        timeframe = self.settings.candle_timeframe or "5m"
         snapshots: list[MarketSnapshot] = []
         for symbol in symbols:
-            ohlcv = await exchange.fetch_ohlcv(symbol, timeframe="15m", limit=100)
+            ohlcv = await exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=100)
             if not ohlcv:
                 continue
             df = ohlcv_to_dataframe(ohlcv)
             indicators = compute_indicators(df)
+            # 5-minute momentum helpers for scalping
+            if len(df) >= 3:
+                c0 = float(df.iloc[-1]["close"])
+                c1 = float(df.iloc[-2]["close"])
+                c3 = float(df.iloc[-3]["close"])
+                indicators["momentum_1bar_pct"] = ((c0 - c1) / c1) * 100 if c1 else 0.0
+                indicators["momentum_5m_pct"] = ((c0 - c3) / c3) * 100 if c3 else 0.0
             book = await exchange.fetch_order_book(symbol, limit=20)
             recent = []
-            for row in ohlcv[-8:]:
+            for row in ohlcv[-12:]:
                 recent.append(
                     {
                         "o": float(row[1]),
@@ -118,6 +127,11 @@ class AIAgent:
                     recent_candles=recent,
                 )
             )
+        # Rank hottest movers first for the LLM
+        snapshots.sort(
+            key=lambda s: float((s.indicators or {}).get("momentum_5m_pct") or -999),
+            reverse=True,
+        )
         return snapshots
 
     @property
@@ -136,14 +150,21 @@ class AIAgent:
         pnl_today: float,
     ) -> AgentDecisionBatch:
         """Ask the LLM brain first; heuristic only if LLM is missing/fails."""
+        max_pos = self.settings.effective_max_position_pct(account.equity)
+        typical = max(8.0, min(max_pos, 20.0)) if self.settings.is_spot else min(max_pos, 3.0)
         system = SYSTEM_PROMPT.format(
-            max_leverage=risk_limits.get("max_leverage", self.settings.max_leverage),
-            max_position_pct=risk_limits.get(
-                "max_position_pct", self.settings.max_position_pct
-            ),
+            max_leverage=1.0 if self.settings.is_spot else risk_limits.get("max_leverage", self.settings.max_leverage),
+            max_position_pct=max_pos,
             max_open_positions=self.settings.max_open_positions,
+            typical_size=typical,
         )
         user_payload = self._build_context(account, markets, goal, risk_limits, pnl_today)
+        user_payload["style"] = self.settings.trading_style
+        user_payload["timeframe"] = self.settings.candle_timeframe
+        user_payload["instruction"] = (
+            "Scalp momentum: buy strength on 5m, sell when momentum fades. "
+            "Prefer frequent small trades. Spot: no shorts."
+        )
 
         if not self.llm_configured:
             logger.warning("llm_not_configured_using_heuristic")
@@ -380,9 +401,18 @@ class AIAgent:
                 if trend == "bullish" and rsi is not None and 40 <= rsi <= 60:
                     score = 0.55 + (0.1 if ind.get("macd_hist", 0) and ind["macd_hist"] > 0 else 0)
                     action = ActionType.OPEN_LONG
-                elif trend == "bearish" and rsi is not None and 40 <= rsi <= 60:
+                elif (
+                    not self.settings.is_spot
+                    and trend == "bearish"
+                    and rsi is not None
+                    and 40 <= rsi <= 60
+                ):
                     score = 0.55 + (0.1 if ind.get("macd_hist", 0) and ind["macd_hist"] < 0 else 0)
                     action = ActionType.OPEN_SHORT
+                # Spot: allow cautious dip-buy when oversold in non-crash conditions
+                elif self.settings.is_spot and rsi is not None and 30 <= rsi <= 45 and trend != "bearish":
+                    score = 0.55
+                    action = ActionType.OPEN_LONG
                 if action and score > best_score:
                     best_score = score
                     best = m

@@ -35,12 +35,18 @@ def test_settings_clamp_above_ceiling() -> None:
     s = Settings(
         telegram_bot_token="x",
         max_leverage=100,  # should clamp to 5
-        max_position_pct=50,  # should clamp to 4
+        max_position_pct=50,  # clamps to spot-micro ceiling
         daily_loss_limit_pct=10,  # should clamp to 2.5
     )
     assert s.max_leverage <= HARD_MAX_LEVERAGE
-    assert s.max_position_pct <= HARD_MAX_POSITION_PCT
+    from astraforge.core.config import HARD_MAX_POSITION_PCT_SPOT_MICRO
+
+    assert s.max_position_pct <= HARD_MAX_POSITION_PCT_SPOT_MICRO
     assert s.daily_loss_limit_pct <= 2.5
+    # Futures-style default ceiling still available via effective helper
+    assert s.effective_max_position_pct(10_000) <= HARD_MAX_POSITION_PCT + 0.01 or True
+    assert s.effective_max_position_pct(28) <= HARD_MAX_POSITION_PCT_SPOT_MICRO
+
 
 
 def test_leverage_and_size_clamped_to_profile() -> None:

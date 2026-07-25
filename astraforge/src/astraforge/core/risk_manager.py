@@ -175,7 +175,13 @@ class RiskManager:
                 )
 
         max_lev = min(self._limits["max_leverage"], HARD_MAX_LEVERAGE)
-        max_pos = min(self._limits["max_position_pct"], HARD_MAX_POSITION_PCT)
+        if self.settings.is_spot and account.equity < 100:
+            max_pos = self.settings.effective_max_position_pct(account.equity)
+        else:
+            from astraforge.core.config import HARD_MAX_POSITION_PCT
+
+            max_pos = min(float(self._limits["max_position_pct"]), HARD_MAX_POSITION_PCT)
+
         if self.settings.is_spot:
             max_lev = 1.0
 

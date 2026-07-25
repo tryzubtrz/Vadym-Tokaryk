@@ -21,7 +21,10 @@ HARD_MAX_DAILY_LOSS_PCT = 2.5
 HARD_MAX_DRAWDOWN_PCT = 7.0
 HARD_MAX_LEVERAGE = 5.0
 HARD_MAX_POSITION_PCT = 4.0
+# Spot micro-accounts (no leverage): allow larger slice so exchange mins are reachable.
+HARD_MAX_POSITION_PCT_SPOT_MICRO = 35.0
 HARD_MAX_OPEN_POSITIONS = 3
+MICRO_EQUITY_USD = 100.0
 
 
 class Settings(BaseSettings):
@@ -58,7 +61,7 @@ class Settings(BaseSettings):
     daily_loss_limit_pct: float = Field(default=2.5, ge=0.1, le=HARD_MAX_DAILY_LOSS_PCT)
     max_drawdown_pct: float = Field(default=6.0, ge=1.0, le=HARD_MAX_DRAWDOWN_PCT)
     max_leverage: float = Field(default=5.0, ge=1.0, le=HARD_MAX_LEVERAGE)
-    max_position_pct: float = Field(default=3.5, ge=0.5, le=HARD_MAX_POSITION_PCT)
+    max_position_pct: float = Field(default=3.5, ge=0.5, le=HARD_MAX_POSITION_PCT_SPOT_MICRO)
     max_open_positions: int = Field(default=3, ge=1, le=HARD_MAX_OPEN_POSITIONS)
 
     # Universe
@@ -66,12 +69,16 @@ class Settings(BaseSettings):
         "BTC/USDT:USDT,ETH/USDT:USDT,SOL/USDT:USDT,BNB/USDT:USDT,XRP/USDT:USDT"
     )
 
+    # Strategy
+    trading_style: Literal["swing", "momentum_scalp"] = "momentum_scalp"
+    candle_timeframe: str = "5m"
+    agent_loop_interval_sec: int = 30
+
     # App
     database_path: str = "./data/astraforge.db"
     log_level: str = "INFO"
     dashboard_host: str = "0.0.0.0"
     dashboard_port: int = 8080
-    agent_loop_interval_sec: int = 60
     default_risk_profile: RiskProfile = RiskProfile.BALANCED
     paper_starting_equity: float = 10_000.0
     config_yaml_path: str = "./config/default.yaml"
@@ -91,7 +98,8 @@ class Settings(BaseSettings):
             "daily_loss_limit_pct": HARD_MAX_DAILY_LOSS_PCT,
             "max_drawdown_pct": HARD_MAX_DRAWDOWN_PCT,
             "max_leverage": HARD_MAX_LEVERAGE,
-            "max_position_pct": HARD_MAX_POSITION_PCT,
+            # Temporary high ceiling; effective max applied in risk_manager / property
+            "max_position_pct": HARD_MAX_POSITION_PCT_SPOT_MICRO,
         }
         ceiling = ceilings.get(info.field_name, value)
         return min(value, ceiling)
@@ -125,6 +133,15 @@ class Settings(BaseSettings):
     def is_spot(self) -> bool:
         """Kraken Pro Spot (no leverage / no short by default)."""
         return self.exchange_id == "kraken"
+
+    def effective_max_position_pct(self, equity: float | None = None) -> float:
+        """Position size ceiling. Spot micro-accounts need higher % to clear exchange mins."""
+        if self.is_spot and equity is not None and equity < MICRO_EQUITY_USD:
+            return min(
+                HARD_MAX_POSITION_PCT_SPOT_MICRO,
+                max(self.max_position_pct, 25.0),
+            )
+        return min(self.max_position_pct, HARD_MAX_POSITION_PCT)
 
     @property
     def is_paper(self) -> bool:

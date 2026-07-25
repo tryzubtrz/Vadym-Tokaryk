@@ -94,6 +94,12 @@ class OrderExecutor:
         if amount <= 0:
             return {"ok": False, "reason": "zero_amount"}
 
+        # Lift to exchange minimum if still within max position budget (micro accounts)
+        try:
+            amount = await self._ensure_min_amount(symbol, amount, price, account)
+        except ValueError as exc:
+            return {"ok": False, "reason": str(exc)}
+
         await self.exchange.set_leverage(symbol, decision.leverage)
         if self.exchange.is_paper:
             self.exchange.set_paper_leverage(symbol, decision.leverage)
@@ -133,6 +139,44 @@ class OrderExecutor:
             "order": order,
             "reasoning": decision.reasoning,
         }
+
+    async def _ensure_min_amount(
+        self,
+        symbol: str,
+        amount: float,
+        price: float,
+        account: AccountSnapshot,
+    ) -> float:
+        """Bump size to exchange minimum when equity is small, without exceeding cash."""
+        ex = self.exchange._exchange
+        if not ex or symbol not in (ex.markets or {}):
+            return amount
+        market = ex.markets[symbol]
+        min_amt = float(((market.get("limits") or {}).get("amount") or {}).get("min") or 0)
+        min_cost = float(((market.get("limits") or {}).get("cost") or {}).get("min") or 0)
+        need = amount
+        if min_amt and need < min_amt:
+            need = min_amt
+        if min_cost and need * price < min_cost:
+            need = min_cost / price
+        # Cap by available cash (~95%) and max position ceiling
+        max_pos = self.exchange.settings.effective_max_position_pct(account.equity)
+        max_notional = account.equity * (max_pos / 100.0)
+        cash_cap = max(0.0, account.available_balance * 0.95)
+        cap = min(max_notional, cash_cap) if cash_cap > 0 else max_notional
+        if need * price > cap and price > 0:
+            need = cap / price
+        if min_amt and need < min_amt:
+            # Cannot meet exchange minimum within risk budget
+            raise ValueError(
+                f"Need ≥{min_amt} {symbol} (${min_amt*price:.2f}) but risk budget "
+                f"allows only ~${cap:.2f}"
+            )
+        try:
+            need = float(ex.amount_to_precision(symbol, need))
+        except Exception:  # noqa: BLE001
+            pass
+        return need
 
     async def _close_or_reduce(
         self,

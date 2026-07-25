@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import asyncio
+
 import ccxt.async_support as ccxt
 
 from astraforge.core.circuit_breaker import BreakerReason, CircuitBreaker, circuit_breaker
@@ -124,7 +126,13 @@ class ExchangeClient:
             "options": {"defaultType": "swap"},
         }
         if exchange_id == "kraken":
-            params["options"] = {"defaultType": "spot"}
+            params["options"] = {
+                "defaultType": "spot",
+                # Reduce Invalid nonce races on busy private endpoints
+                "adjustForTimeDifference": True,
+            }
+            params["enableRateLimit"] = True
+            params["rateLimit"] = 350
         elif exchange_id == "kraken_futures":
             params["options"] = {"defaultType": "future"}
 
@@ -210,12 +218,26 @@ class ExchangeClient:
     async def fetch_balance_raw(self) -> dict[str, Any]:
         if not self._exchange:
             return {}
-        try:
-            return await self._exchange.fetch_balance()
-        except Exception as exc:  # noqa: BLE001
-            logger.error("fetch_balance_failed", error=str(exc))
-            await self.breaker.trip(BreakerReason.API_ERROR, detail=str(exc))
-            return {}
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            try:
+                await asyncio.sleep(0.35 * attempt)
+                return await self._exchange.fetch_balance()
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                err = str(exc).lower()
+                if "nonce" in err and attempt < 2:
+                    logger.warning("balance_nonce_retry", attempt=attempt + 1)
+                    continue
+                logger.error("fetch_balance_failed", error=str(exc))
+                # Nonce / transient auth noise must NOT halt trading forever
+                if "nonce" in err:
+                    return {}
+                await self.breaker.trip(BreakerReason.API_ERROR, detail=str(exc))
+                return {}
+        if last_exc:
+            logger.error("fetch_balance_failed", error=str(last_exc))
+        return {}
 
     async def fetch_positions(self) -> list[PositionInfo]:
         if self.is_paper and (not self._exchange or not self._markets_loaded):
@@ -306,27 +328,51 @@ class ExchangeClient:
                 mode=TradingMode.PAPER,
             )
 
-        positions = await self.fetch_positions()
+        # Live mode
+        if self.settings.is_spot:
+            positions = await self._spot_positions_from_balance()
+        else:
+            positions = await self.fetch_positions()
         unrealized = sum(p.unrealized_pnl for p in positions)
 
         bal = await self.fetch_balance_raw()
         total = 0.0
         free = 0.0
         if bal:
-            # Binance/Bybit → USDT; Kraken → USD (fallback to USDT)
             quote = bal.get("USD") or bal.get("USDT") or {}
-            total = float(
-                quote.get("total")
-                or bal.get("total", {}).get("USD")
-                or bal.get("total", {}).get("USDT")
-                or 0
-            )
             free = float(
                 quote.get("free")
                 or bal.get("free", {}).get("USD")
                 or bal.get("free", {}).get("USDT")
                 or 0
             )
+            total = float(
+                quote.get("total")
+                or bal.get("total", {}).get("USD")
+                or bal.get("total", {}).get("USDT")
+                or free
+            )
+            if self.settings.is_spot:
+                # Cash + crypto mark-to-market
+                eq = 0.0
+                totals = bal.get("total") or {}
+                for asset, amt in totals.items():
+                    a = float(amt or 0)
+                    if a <= 0:
+                        continue
+                    if asset in {"USD", "USDT", "USDC", "EUR", "ZUSD", "GBP", "CAD"}:
+                        eq += a
+                        continue
+                    sym = f"{asset}/USD"
+                    if self._exchange and sym in (self._exchange.markets or {}):
+                        try:
+                            t = await self.fetch_ticker(sym)
+                            px = float(t.get("last") or 0)
+                            eq += a * px
+                        except Exception:  # noqa: BLE001
+                            pass
+                if eq > 0:
+                    total = eq
 
         peak = max(peak_equity, total)
         dd = ((peak - total) / peak * 100.0) if peak > 0 else 0.0
@@ -342,6 +388,40 @@ class ExchangeClient:
             positions=positions,
             mode=self.mode,
         )
+
+    async def _spot_positions_from_balance(self) -> list[PositionInfo]:
+        """Treat non-fiat crypto balances as long spot positions."""
+        bal = await self.fetch_balance_raw()
+        totals = bal.get("total") or {}
+        out: list[PositionInfo] = []
+        skip = {"USD", "USDT", "USDC", "EUR", "ZUSD", "GBP", "CAD"}
+        for asset, amt in totals.items():
+            qty = float(amt or 0)
+            if qty <= 0 or asset in skip:
+                continue
+            symbol = f"{asset}/USD"
+            if self._exchange and symbol not in (self._exchange.markets or {}):
+                continue
+            try:
+                t = await self.fetch_ticker(symbol)
+                px = float(t.get("last") or 0)
+            except Exception:  # noqa: BLE001
+                continue
+            if px <= 0 or qty * px < 0.4:
+                continue
+            out.append(
+                PositionInfo(
+                    symbol=symbol,
+                    side=Side.LONG,
+                    size=qty,
+                    entry_price=px,
+                    mark_price=px,
+                    unrealized_pnl=0.0,
+                    leverage=1.0,
+                    notional=qty * px,
+                )
+            )
+        return out
 
     async def set_leverage(self, symbol: str, leverage: float) -> None:
         if self.is_paper or not self._exchange:
@@ -364,7 +444,8 @@ class ExchangeClient:
     ) -> dict[str, Any]:
         """Place a market order. Paper mode NEVER hits the live order endpoint."""
         order_params = dict(params or {})
-        if reduce_only:
+        # Kraken spot does not use reduceOnly the same way as futures
+        if reduce_only and not self.settings.is_spot:
             order_params["reduceOnly"] = True
 
         # Hard rule: paper/sim always uses local ledger (even if markets are loaded).
@@ -404,9 +485,20 @@ class ExchangeClient:
         except Exception as exc:  # noqa: BLE001
             logger.error("order_failed", error=str(exc), symbol=symbol, side=side)
             err = str(exc).lower()
-            # Min-size / validation errors should not trip the breaker forever
             if "minimum" in err or "invalid arguments" in err or "volume" in err:
                 raise
+            if "nonce" in err:
+                # Transient Kraken clock/nonce issue — retry once, don't trip breaker
+                await asyncio.sleep(0.5)
+                try:
+                    order = await self._exchange.create_order(
+                        symbol, "market", side, amount, None, order_params
+                    )
+                    logger.info("order_placed_after_nonce_retry", symbol=symbol, id=order.get("id"))
+                    return order
+                except Exception as exc2:  # noqa: BLE001
+                    logger.error("order_failed", error=str(exc2), symbol=symbol, side=side)
+                    raise
             if "margin" in err or "insufficient" in err:
                 await self.breaker.trip(BreakerReason.MARGIN_CALL, detail=str(exc))
             else:
