@@ -12,27 +12,19 @@
   "range_lookback": 40,
   "buy_zone_pct": 0.4,
   "leverage": 1,
-  "open": {
-    "id": "6317adf5",
-    "side": "long",
-    "contracts": 13.0,
-    "entry": 58.31,
-    "notional": 7.5803,
-    "opened_at": "2026-07-25T10:41:54.819604+00:00",
-    "order_id": "835948755413522624",
-    "mode": "live",
-    "range_pos": 0.1818181818182112
-  },
+  "open": null,
   "last_open_at": "2026-07-25T10:41:54.819610+00:00",
-  "last_close_at": "",
-  "realized_pnl_usdc": 0.0,
-  "wins": 0,
+  "last_close_at": "2026-07-25T17:56:10.786802+00:00",
+  "realized_pnl_usdc": 0.012999999999999262,
+  "wins": 1,
   "losses": 0,
-  "trades": 0,
+  "trades": 1,
   "stopped": false,
   "stop_reason": "",
   "measured_taker_pct": 0.08,
-  "trade_log": [],
+  "trade_log": [
+    "2026-07-25T17:56:10.786789+00:00 time entry=58.31 pnl=+0.0130 sleeve=20.01"
+  ],
   "note": "Fiat FX geo-blocked; SILVER/USDC Kraken-style range swing with ~$20",
-  "updated_at": "2026-07-25T14:14:30.321565+00:00"
+  "updated_at": "2026-07-25T17:57:11.639466+00:00"
 }

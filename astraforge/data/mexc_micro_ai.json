@@ -27,22 +27,22 @@
   "measured_taker_pct": 0.08,
   "last_signal": {
     "ok": true,
-    "score": 0.567,
-    "side": "long",
+    "score": 0.259,
+    "side": null,
     "min_score": 0.48,
-    "px": 1.0878,
-    "range_pos": 0.383,
-    "rsi1": 48.3,
-    "rsi5": 61.0,
-    "mom1": -0.11,
-    "mom5": 0.018,
+    "px": 1.1026,
+    "range_pos": 0.836,
+    "rsi1": 11.1,
+    "rsi5": 56.6,
+    "mom1": 0.0,
+    "mom5": -0.28,
     "parts": {
-      "trend": 0.317,
+      "trend": 1.0,
       "rsi5": 0.45,
-      "rsi1": 0.55,
-      "range": 0.617,
-      "mom5": 0.12,
-      "mom1": 0.0
+      "rsi1": 0.85,
+      "range": -0.25,
+      "mom5": -0.2,
+      "mom1": 0.08
     }
   },
   "trade_log": [
@@ -50,5 +50,5 @@
   ],
   "lessons": [],
   "night_started_at": "2026-07-25T10:23:49.809485+00:00",
-  "updated_at": "2026-07-25T14:14:29.631395+00:00"
+  "updated_at": "2026-07-25T17:57:12.981897+00:00"
 }
