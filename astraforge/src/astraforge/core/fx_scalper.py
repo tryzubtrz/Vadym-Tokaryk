@@ -192,17 +192,12 @@ class FxMultiScalper:
         return (2.0 * fee) + max(0.0, spread) + 0.02
 
     async def manage_open_slots(self) -> list[dict[str, Any]]:
-        """FX exits — ONLY when net edge clears fees. Tiny 'green' on bid still loses money.
-
-        Kraken charges ~0.2% per side. Closing at +0.04% crystallizes a ~0.36% loss.
-        If we cannot exit net-green, absorb USD as cash instead of paying another fee.
-        """
+        """FX exits — ONLY when net edge clears fees (swing / rare mode)."""
         results: list[dict[str, Any]] = []
         slots = list(self.store.data.get("open_slots") or [])
         now = datetime.now(timezone.utc)
-        configured_tp = float(self.store.data.get("fx_instant_tp_pct") or 0.04)
-        max_hold_green = float(self.store.data.get("max_hold_sec_green") or 120)
-        max_hold_be = float(self.store.data.get("max_hold_sec_force_be") or 300)
+        configured_tp = float(self.store.data.get("fx_instant_tp_pct") or 0.55)
+        max_hold_be = float(self.store.data.get("max_hold_sec_force_be") or 43_200)
         for slot in slots:
             symbol = slot["symbol"]
             entry = float(slot["entry"])
@@ -220,11 +215,11 @@ class FxMultiScalper:
             if px <= 0 or entry <= 0:
                 continue
             pnl_pct = ((px - entry) / entry) * 100.0
-            min_net = max(configured_tp, self._round_trip_cost_pct(symbol, bid=bid or px, ask=ask or px))
-            # Approx net after one more taker fee on the sell
+            min_net = max(
+                configured_tp,
+                self._round_trip_cost_pct(symbol, bid=bid or px, ask=ask or px),
+            )
             sell_fee = self._taker_fee_pct(symbol)
-            # Entry already paid buy fee; require bid move to cover sell fee + leftover buy drag
-            # Conservative: require full round-trip from entry mark
             net_pct = pnl_pct - sell_fee
             emergency = float(slot.get("emergency_stop") or 0)
             age_sec = 0.0
@@ -243,8 +238,9 @@ class FxMultiScalper:
                 action = "pct_tp"
                 reason = f"+{pnl_pct:.4f}% >= fee-aware min {min_net:.2f}% — close net"
             elif age_sec >= max_hold_be and pnl_pct < min_net:
-                # Do NOT sell into fees. USD from USD/CAD is already cash — drop slot bookkeeping.
                 self.store.remove_slot(slot["id"])
+                self.store.data["last_close_at"] = now.isoformat()
+                self.store.save()
                 results.append(
                     {
                         "ok": True,
@@ -254,18 +250,12 @@ class FxMultiScalper:
                         "pnl_pct": pnl_pct,
                         "age_sec": age_sec,
                         "reason": (
-                            f"held {age_sec:.0f}s; bid {pnl_pct:+.4f}% < fee-min {min_net:.2f}% "
+                            f"held {age_sec/3600:.1f}h; bid {pnl_pct:+.4f}% < fee-min {min_net:.2f}% "
                             f"— keep as cash, skip fee close"
                         ),
                     }
                 )
-                logger.info(
-                    "fx_slot_absorbed",
-                    symbol=symbol,
-                    pnl_pct=pnl_pct,
-                    min_net=min_net,
-                    age_sec=age_sec,
-                )
+                logger.info("fx_slot_absorbed", symbol=symbol, pnl_pct=pnl_pct, min_net=min_net, age_sec=age_sec)
                 continue
 
             if not action:
@@ -299,18 +289,15 @@ class FxMultiScalper:
                 fee_ccy = str(fee.get("currency") or "")
                 if fee_cost and fee_ccy == "CAD" and fill > 0:
                     fee_cost = fee_cost / fill
-                elif fee_cost and fee_ccy not in {"USD", "USDT", "USDC", ""}:
-                    # leave as-is best effort
-                    pass
             except Exception:  # noqa: BLE001
-                fee_cost = amount * fill * (sell_fee / 100.0) if symbol.endswith("/USD") else (
-                    amount * (sell_fee / 100.0)
-                )
+                fee_cost = amount * (sell_fee / 100.0)
             realized = (fill - entry) * amount
             if symbol.endswith("/CAD") and fill > 0:
                 realized = realized / fill
             realized -= abs(fee_cost)
             self.store.remove_slot(slot["id"])
+            self.store.data["last_close_at"] = now.isoformat()
+            self.store.save()
             self.store.record_fx_profit(realized)
             results.append(
                 {
@@ -323,14 +310,7 @@ class FxMultiScalper:
                     "order": order,
                 }
             )
-            logger.info(
-                "fx_slot_closed",
-                symbol=symbol,
-                action=action,
-                pnl=realized,
-                pnl_pct=pnl_pct,
-                reason=reason,
-            )
+            logger.info("fx_slot_closed", symbol=symbol, action=action, pnl=realized, pnl_pct=pnl_pct, reason=reason)
         return results
 
     async def maybe_open(self, available_usd: float | None = None) -> dict[str, Any] | None:
@@ -339,27 +319,32 @@ class FxMultiScalper:
         fx_cap = float(snap.get("fx_bucket_usd") or 0)
         crypto_reserve = float(snap.get("crypto_hold_usd") or 0)
         open_n = self.store.open_slot_count()
-        max_slots = int(snap.get("max_slots") or 10)
+        max_slots = int(snap.get("max_slots") or 1)
         if open_n >= max_slots or fx_cap < 4:
             return {"skipped": True, "reason": "no_slot_capacity_or_capital"}
 
-        # Hard block: paid-fee accounts cannot scalp 0.04% — each round trip loses money.
-        if not bool(getattr(self.settings, "zero_fee_mode", False)):
-            sample = "USD/CAD"
-            fee = self._taker_fee_pct(sample)
-            if fee >= 0.05:  # >= 5 bps per side
-                return {
-                    "skipped": True,
-                    "reason": (
-                        f"fees_block_scalp: taker {fee:.2f}%/side "
-                        f"(~{2*fee:.2f}% round-trip). Enable real zero-fee or pause FX scalp."
-                    ),
-                }
+        configured_tp = float(snap.get("fx_instant_tp_pct") or 0.55)
+        sample_cost = self._round_trip_cost_pct("USD/CAD", bid=1.41, ask=1.412)
+        if not bool(getattr(self.settings, "zero_fee_mode", False)) and configured_tp + 1e-9 < sample_cost:
+            return {
+                "skipped": True,
+                "reason": f"tp_{configured_tp:.2f}%_below_fee_rt_{sample_cost:.2f}%",
+            }
+
+        cooldown = float(snap.get("open_cooldown_sec") or 2700)
+        last_at = str(snap.get("last_open_at") or snap.get("last_close_at") or "")
+        if last_at and cooldown > 0:
+            try:
+                last_dt = datetime.fromisoformat(last_at.replace("Z", "+00:00"))
+                age = (datetime.now(timezone.utc) - last_dt).total_seconds()
+                if age < cooldown:
+                    return {"skipped": True, "reason": f"cooldown_{int(cooldown - age)}s_left"}
+            except Exception:  # noqa: BLE001
+                pass
 
         cash_usd = float(available_usd) if available_usd is not None else float(
             await self.exchange.free_balance("USD")
         )
-        # Count CAD working cash toward FX capacity (in USD terms)
         cad_usd = 0.0
         try:
             cad = await self.exchange.free_balance("CAD")
@@ -371,27 +356,18 @@ class FxMultiScalper:
         except Exception:  # noqa: BLE001
             cad_usd = 0.0
         cash = cash_usd + cad_usd
-        spendable = min(fx_cap, max(0.0, cash - crypto_reserve))
-        spendable = max(0.0, spendable * 0.98)
-        if spendable < 4.0:
+
+        work_pct = float(snap.get("working_capital_pct") or 0.35)
+        work_pct = min(max(work_pct, 0.15), 0.5)
+        work_budget = min(fx_cap, cash) * work_pct
+        if work_budget < 4.0:
             return {
                 "skipped": True,
-                "reason": (
-                    f"spendable_usd_{spendable:.2f}_below_min "
-                    f"(usd={cash_usd:.2f}, cad_usd={cad_usd:.2f}, crypto_reserve={crypto_reserve:.2f})"
-                ),
+                "reason": f"working_budget_{work_budget:.2f}_below_min (cash={cash:.2f})",
             }
 
-        # Top up CAD working float so CAD pairs can trade (auto-convert from USD)
-        convert_meta: dict[str, Any] | None = None
-        if bool(snap.get("auto_convert_fx", True)):
-            # Only convert from USD cash above crypto reserve
-            usd_for_convert = max(0.0, cash_usd - crypto_reserve) * 0.98
-            convert_meta = await self._ensure_cad_float(min(spendable, usd_for_convert))
-
-        pairs = [p for p in (snap.get("fx_pairs") or []) if p]
-        if not pairs:
-            return {"skipped": True, "reason": "no_fx_pairs"}
+        convert_meta: dict[str, Any] | None = {"ok": True, "skipped": True, "reason": "swing_no_preconvert"}
+        pairs = [p for p in (snap.get("fx_pairs") or []) if p] or ["USD/CAD", "EUR/USD"]
 
         open_syms = {s.get("symbol") for s in (snap.get("open_slots") or [])}
         candidates: list[dict[str, Any]] = []
@@ -410,6 +386,8 @@ class FxMultiScalper:
             "pick": pick,
             "candidates": candidates[:8],
             "convert": convert_meta,
+            "mode": "swing",
+            "min_tp": configured_tp,
             "ts": datetime.now(timezone.utc).isoformat(),
         }
         if pick.get("action") != "buy_now" or not pick.get("symbol"):
@@ -420,32 +398,27 @@ class FxMultiScalper:
         if not info or not info.get("in_buy_zone"):
             return {"skipped": True, "reason": "not_in_buy_zone_after_ai", "ai": pick}
 
-        # Refresh USD after any conversion
-        cash = float(await self.exchange.free_balance("USD"))
-        spendable = min(fx_cap, max(0.0, cash - crypto_reserve)) * 0.98
-
-        slot_usd = self.effective_slot_usd(symbol)
+        cash_usd = float(await self.exchange.free_balance("USD"))
+        preferred = float(snap.get("target_slot_usd") or 9.0)
         used = sum(float(s.get("notional_usd") or 0) for s in (snap.get("open_slots") or []))
-        free = max(0.0, min(fx_cap - used, spendable))
-        if free < slot_usd:
-            slot_usd = free
+        free = max(0.0, work_budget - used)
+        # Prefer EUR/USD with USD cash; USD/CAD can use CAD float
+        if symbol.endswith("/USD"):
+            free = min(free, max(0.0, cash_usd - crypto_reserve) * 0.98)
+        else:
+            free = min(free, max(0.0, (cash_usd + cad_usd) - crypto_reserve) * work_pct)
+        slot_usd = min(preferred, free, self.effective_slot_usd(symbol) if preferred < 4 else preferred)
+        slot_usd = min(max(slot_usd, 5.0 if free >= 5 else free), free)
         if slot_usd < 4.0:
             return {"skipped": True, "reason": f"free_capital_{free:.2f}_below_min", "convert": convert_meta}
 
         px = float(info["price"])
         base, quote = symbol.split("/")
-        # Order amount in BASE units
         if symbol.startswith("USD/"):
-            # Buy USD paying CAD — amount is USD
             amount = slot_usd
-            quote_need = amount * px  # CAD
+            quote_need = amount * px
         else:
             amount = slot_usd / px if px > 0 else 0.0
-            quote_need = slot_usd  # roughly in quote if quote=USD; if CAD, cost≈amount*px
-
-        if quote == "CAD":
-            quote_need = amount * px
-        elif quote == "USD":
             quote_need = amount * px
 
         try:
@@ -458,29 +431,18 @@ class FxMultiScalper:
                     if quote == "USD":
                         slot_usd = amount * px
                     elif quote == "CAD":
-                        # notional in USD ≈ CAD cost / USD/CAD
-                        try:
-                            t = await self.exchange.fetch_ticker("USD/CAD")
-                            usdcad = float(t.get("last") or 0) or px
-                        except Exception:  # noqa: BLE001
-                            usdcad = px if base == "USD" else 1.35
                         quote_need = amount * px
-                        slot_usd = quote_need / usdcad if base != "USD" else amount
+                        slot_usd = amount
                     if slot_usd > free:
-                        return {
-                            "skipped": True,
-                            "reason": f"min_lot_exceeds_free_{free:.2f}",
-                            "symbol": symbol,
-                        }
+                        return {"skipped": True, "reason": f"min_lot_exceeds_free_{free:.2f}", "symbol": symbol}
                 quote_need = amount * px
                 amount = float(ex.amount_to_precision(symbol, amount))
         except Exception:  # noqa: BLE001
             pass
 
-        # Auto-convert quote currency if missing
         if bool(snap.get("auto_convert_fx", True)) and quote not in {"USD", "USDT", "USDC"}:
             ens = await self.exchange.ensure_currency(
-                quote, quote_need, max_spend_usd=max(spendable, slot_usd * 1.15)
+                quote, quote_need, max_spend_usd=max(free, slot_usd * 1.15)
             )
             convert_meta = {"pre_float": convert_meta, "for_order": ens}
             if not ens.get("ok"):
@@ -515,6 +477,7 @@ class FxMultiScalper:
             }
 
         fill = float(order.get("average") or order.get("price") or px)
+        now_iso = datetime.now(timezone.utc).isoformat()
         slot = {
             "id": str(uuid.uuid4())[:8],
             "symbol": symbol,
@@ -523,14 +486,18 @@ class FxMultiScalper:
             "entry": fill,
             "notional_usd": slot_usd,
             "pip": info["pip"],
-            "tp_min": info["tp_price_min"],
+            "tp_min": fill * (1.0 + configured_tp / 100.0),
             "emergency_stop": emergency,
-            "opened_at": datetime.now(timezone.utc).isoformat(),
+            "opened_at": now_iso,
             "ai_reason": pick.get("reason"),
             "convert": convert_meta,
+            "mode": "swing",
+            "min_tp_pct": configured_tp,
         }
         self.store.add_slot(slot)
-        logger.info("fx_slot_opened", symbol=symbol, amount=amount, entry=fill, convert=bool(convert_meta))
+        self.store.data["last_open_at"] = now_iso
+        self.store.save()
+        logger.info("fx_slot_opened", symbol=symbol, amount=amount, entry=fill, mode="swing", min_tp=configured_tp)
         return {"ok": True, "slot": slot, "order": order, "ai": pick, "convert": convert_meta}
 
     async def _ensure_cad_float(self, spendable_usd: float) -> dict[str, Any]:

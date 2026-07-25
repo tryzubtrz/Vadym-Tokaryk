@@ -22,15 +22,15 @@ os.environ.setdefault("TRADING_MODE", "live")
 os.environ.setdefault("LIVE_CONFIRMED", "true")
 os.environ.setdefault(
     "TRADE_SYMBOLS",
-    "USD/CAD,EUR/CAD,EUR/USD,GBP/USD,AUD/USD",
+    "USD/CAD,EUR/USD",
 )
 os.environ.setdefault("TRADING_STYLE", "fx_multi_scalp")
-os.environ.setdefault("CANDLE_TIMEFRAME", "5m")
-os.environ.setdefault("AGENT_LOOP_INTERVAL_SEC", "20")
-os.environ.setdefault("MAX_POSITION_PCT", "30")
-os.environ.setdefault("MAX_OPEN_POSITIONS", "10")
+os.environ.setdefault("CANDLE_TIMEFRAME", "15m")
+os.environ.setdefault("AGENT_LOOP_INTERVAL_SEC", "90")
+os.environ.setdefault("MAX_POSITION_PCT", "35")
+os.environ.setdefault("MAX_OPEN_POSITIONS", "1")
 os.environ["ZERO_FEE_MODE"] = "false"
-os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.50")
+os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.55")
 os.environ.setdefault("FX_BUCKET_USD", "26.5")
 os.environ.setdefault("CRYPTO_BUCKET_USD", "0")
 # Force 7% — .env may still say 6.0 from pre-FX-only days

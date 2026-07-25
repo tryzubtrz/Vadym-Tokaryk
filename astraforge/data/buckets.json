@@ -3,59 +3,29 @@
   "crypto_hold_usd": 0.0,
   "crypto_hold_symbol": "",
   "crypto_hold_units": 0.0,
-  "max_slots": 10,
-  "target_slot_usd": 2.0,
+  "max_slots": 1,
+  "target_slot_usd": 9.0,
   "daily_profit_usd": 0.004808499454841676,
   "day_key": "2026-07-25",
   "realized_fx_pnl_total": 0.004808499454841676,
-  "open_slots": [
-    {
-      "id": "b95b8386",
-      "symbol": "USD/CAD",
-      "side": "long",
-      "amount": 5.0,
-      "entry": 1.4122,
-      "notional_usd": 5.0,
-      "pip": 0.0001,
-      "tp_min": 1.4125999999999999,
-      "emergency_stop": 1.30899676,
-      "opened_at": "2026-07-25T07:58:52.384086+00:00",
-      "ai_reason": "Price is near the bottom of the range and spread is low.",
-      "convert": {
-        "pre_float": {
-          "ok": true,
-          "skipped": true,
-          "reason": "cad_float_budget_below_min"
-        },
-        "for_order": {
-          "ok": true,
-          "converted": false,
-          "asset": "CAD",
-          "have": 16.8019
-        }
-      }
-    }
-  ],
+  "open_slots": [],
   "fx_pairs": [
     "USD/CAD",
-    "EUR/CAD",
-    "EUR/USD",
-    "GBP/USD",
-    "AUD/USD"
+    "EUR/USD"
   ],
   "fx_target_usd": 26.427415142139882,
   "auto_split_equity": true,
   "auto_convert_fx": true,
   "crypto_trading_enabled": false,
   "profit_to_crypto_pct": 0.0,
-  "fx_instant_tp_pct": 0.5,
-  "max_hold_sec_green": 120,
-  "max_hold_sec_force_be": 300,
+  "fx_instant_tp_pct": 0.55,
+  "max_hold_sec_green": 86400,
+  "max_hold_sec_force_be": 43200,
   "take_profit_pips_min": 4,
   "take_profit_pips_max": 8,
   "small_green_pips": 1,
-  "range_lookback": 40,
-  "buy_zone_pct": 0.3,
+  "range_lookback": 60,
+  "buy_zone_pct": 0.25,
   "emergency_stop_mode": "yearly_low",
   "realized_crypto_pnl_total": -0.0020109959999997785,
   "fx_profit_total": 0.004808499454841676,
@@ -68,6 +38,9 @@
   "daily_fx_loss": 0.0,
   "daily_crypto_profit": 0.0,
   "daily_crypto_loss": 0.0020109959999997785,
-  "updated_at": "2026-07-25T08:06:52.120899+00:00",
-  "pending_crypto_buy_usd": 0.0
+  "updated_at": "2026-07-25T08:55:49.722998+00:00",
+  "pending_crypto_buy_usd": 0.0,
+  "fx_mode": "swing",
+  "working_capital_pct": 0.35,
+  "open_cooldown_sec": 2700
 }

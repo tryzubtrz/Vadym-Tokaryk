@@ -28,33 +28,35 @@ class BucketStore:
             "crypto_hold_usd": 8.0,
             "crypto_hold_symbol": "",
             "crypto_hold_units": 0.0,
-            "max_slots": 10,
-            "target_slot_usd": 2.0,  # preferred; raised to exchange min at runtime
+            "max_slots": 1,
+            "target_slot_usd": 9.0,  # ~35% of ~$26; raised to exchange min at runtime
             "daily_profit_usd": 0.0,
             "day_key": "",
             "realized_fx_pnl_total": 0.0,
             "open_slots": [],  # list of slot dicts
             "fx_pairs": [
                 "USD/CAD",
-                "EUR/CAD",
                 "EUR/USD",
-                "GBP/USD",
-                "AUD/USD",
             ],
             "fx_target_usd": 20.0,
             "auto_split_equity": True,
             "auto_convert_fx": True,
             "crypto_trading_enabled": False,  # FX-only mode
             "profit_to_crypto_pct": 0.0,
-            # FX exit: >= instant_tp_pct → close now; else any green waits max_hold_sec_green
-            "fx_instant_tp_pct": 0.04,
-            "max_hold_sec_green": 120,   # 2 min for sub-0.04% greens
-            "max_hold_sec_force_be": 300,
-            "take_profit_pips_min": 4,
-            "take_profit_pips_max": 8,
+            # Rare + larger move (fee-aware). Close only when move clears fees (~0.55%+).
+            "fx_mode": "swing",
+            "fx_instant_tp_pct": 0.55,
+            "max_hold_sec_green": 86_400,
+            "max_hold_sec_force_be": 43_200,  # 12h then absorb cash (do not fee-close)
+            "working_capital_pct": 0.35,
+            "open_cooldown_sec": 2_700,  # 45 min between new opens
+            "last_open_at": "",
+            "last_close_at": "",
+            "take_profit_pips_min": 40,
+            "take_profit_pips_max": 80,
             "small_green_pips": 1,
-            "range_lookback": 40,
-            "buy_zone_pct": 0.30,
+            "range_lookback": 60,
+            "buy_zone_pct": 0.25,
             "emergency_stop_mode": "yearly_low",
             "realized_crypto_pnl_total": 0.0,
             "fx_profit_total": 0.0,
