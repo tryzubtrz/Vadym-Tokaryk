@@ -91,7 +91,7 @@ class ExchangeClient:
         self._exchange: ccxt.Exchange | None = None
         self._markets_loaded = False
 
-        # Paper ledger (used when testnet unavailable or for local sim)
+        # Paper ledger (local simulation — never sends live orders in paper mode)
         self._paper_equity = settings.paper_starting_equity
         self._paper_positions: dict[str, dict[str, Any]] = {}
         self._paper_realized_today = 0.0
@@ -266,13 +266,33 @@ class ExchangeClient:
             return self._paper_position_infos() if self.is_paper else []
 
     async def get_account_snapshot(self, peak_equity: float = 0.0) -> AccountSnapshot:
-        positions = await self.fetch_positions()
-        unrealized = sum(p.unrealized_pnl for p in positions)
-
-        if self.is_paper and (not self._exchange or not self._markets_loaded):
+        # Paper mode: always use simulated ledger + live marks when possible
+        if self.is_paper:
+            positions = self._paper_position_infos()
+            # refresh marks from tickers
+            for p in positions:
+                try:
+                    t = await self.fetch_ticker(p.symbol)
+                    price = float(t.get("last") or t.get("close") or p.mark_price or p.entry_price)
+                    if p.symbol in self._paper_positions:
+                        self._paper_positions[p.symbol]["mark"] = price
+                        d = 1 if self._paper_positions[p.symbol]["side"] == "long" else -1
+                        self._paper_positions[p.symbol]["upnl"] = (
+                            (price - self._paper_positions[p.symbol]["entry"])
+                            * self._paper_positions[p.symbol]["size"]
+                            * d
+                        )
+                except Exception:  # noqa: BLE001
+                    pass
+            positions = self._paper_position_infos()
+            unrealized = sum(p.unrealized_pnl for p in positions)
             equity = self._paper_equity + unrealized
-            available = max(0.0, self._paper_equity - sum(p.notional / max(p.leverage, 1) for p in positions))
-            peak = max(peak_equity, equity)
+            available = max(
+                0.0,
+                self._paper_equity
+                - sum(p.notional / max(p.leverage, 1) for p in positions),
+            )
+            peak = max(peak_equity, equity, self._paper_equity)
             dd = ((peak - equity) / peak * 100.0) if peak > 0 else 0.0
             return AccountSnapshot(
                 equity=equity,
@@ -286,11 +306,14 @@ class ExchangeClient:
                 mode=TradingMode.PAPER,
             )
 
+        positions = await self.fetch_positions()
+        unrealized = sum(p.unrealized_pnl for p in positions)
+
         bal = await self.fetch_balance_raw()
         total = 0.0
         free = 0.0
         if bal:
-            # Binance/Bybit → USDT; Kraken Futures → USD (fallback to USDT)
+            # Binance/Bybit → USDT; Kraken → USD (fallback to USDT)
             quote = bal.get("USD") or bal.get("USDT") or {}
             total = float(
                 quote.get("total")
@@ -304,10 +327,6 @@ class ExchangeClient:
                 or bal.get("free", {}).get("USDT")
                 or 0
             )
-
-        if total <= 0 and self.is_paper:
-            total = self._paper_equity + unrealized
-            free = max(0.0, self._paper_equity)
 
         peak = max(peak_equity, total)
         dd = ((peak - total) / peak * 100.0) if peak > 0 else 0.0
@@ -325,7 +344,9 @@ class ExchangeClient:
         )
 
     async def set_leverage(self, symbol: str, leverage: float) -> None:
-        if not self._exchange or self.is_paper and not self._markets_loaded:
+        if self.is_paper or not self._exchange:
+            return
+        if self.settings.is_spot:
             return
         try:
             await self._exchange.set_leverage(int(leverage), symbol)
@@ -341,16 +362,28 @@ class ExchangeClient:
         reduce_only: bool = False,
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Place a market order. In pure paper mode, update local ledger."""
+        """Place a market order. Paper mode NEVER hits the live order endpoint."""
         order_params = dict(params or {})
         if reduce_only:
             order_params["reduceOnly"] = True
 
-        if self.is_paper and (not self._exchange or not self._markets_loaded):
+        # Hard rule: paper/sim always uses local ledger (even if markets are loaded).
+        if self.is_paper:
             return await self._paper_fill(symbol, side, amount, reduce_only=reduce_only)
 
         assert self._exchange is not None
         try:
+            # Respect exchange amount precision / minimums when live
+            try:
+                amount = float(self._exchange.amount_to_precision(symbol, amount))
+            except Exception:  # noqa: BLE001
+                pass
+            market = (self._exchange.markets or {}).get(symbol) or {}
+            min_amt = float(((market.get("limits") or {}).get("amount") or {}).get("min") or 0)
+            if min_amt and amount < min_amt:
+                raise ValueError(
+                    f"Order amount {amount} below exchange minimum {min_amt} for {symbol}"
+                )
             order = await self._exchange.create_order(
                 symbol,
                 "market",
@@ -371,6 +404,9 @@ class ExchangeClient:
         except Exception as exc:  # noqa: BLE001
             logger.error("order_failed", error=str(exc), symbol=symbol, side=side)
             err = str(exc).lower()
+            # Min-size / validation errors should not trip the breaker forever
+            if "minimum" in err or "invalid arguments" in err or "volume" in err:
+                raise
             if "margin" in err or "insufficient" in err:
                 await self.breaker.trip(BreakerReason.MARGIN_CALL, detail=str(exc))
             else:
