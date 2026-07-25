@@ -86,24 +86,8 @@ async def main() -> None:
         print(f"\n=== NOTIFY ===\n{msg}\n==============\n", flush=True)
 
     engine.set_notify(notify)
-    await engine.start()
 
-    # Ensure FX strategy is active and trading enabled
-    await engine.state.save_status_fields(trading_enabled=True)
-    await engine.breaker.reset(force_daily=True)
-    peak = float(await engine.state.get_kv("peak_equity", 0) or 0)
-    acc = await engine.exchange.get_account_snapshot(peak_equity=peak)
-    today = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).strftime("%Y-%m-%d")
-    await engine.state.save_status_fields(day_start_equity=acc.equity, pnl_today=0.0, day_key=today)
-    engine.risk.restore_day_start(acc.equity, today)
-
-    if not await engine.state.get_active_goal():
-        await engine.handle_user_text(
-            "FX multi scalp: часті маленькі угоди по валютах, ціль 1$ на день"
-        )
-
-    print("Buckets:", engine.buckets.snapshot(), flush=True)
-
+    # Start dashboard ASAP; exchange connect happens inside engine.start
     config = uvicorn.Config(
         app,
         host=settings.dashboard_host,
@@ -112,18 +96,31 @@ async def main() -> None:
         loop="asyncio",
     )
     server = uvicorn.Server(config)
-    stop = asyncio.Event()
+    serve_task = asyncio.create_task(server.serve(), name="dashboard")
 
-    def _stop(*_a: object) -> None:
-        stop.set()
+    await engine.start()
+    await engine.state.save_status_fields(trading_enabled=True)
+    try:
+        await engine.breaker.reset(force_daily=True)
+        peak = float(await engine.state.get_kv("peak_equity", 0) or 0)
+        acc = await engine.exchange.get_account_snapshot(peak_equity=peak)
+        if acc.equity > 0:
+            today = __import__("datetime").datetime.now(
+                __import__("datetime").timezone.utc
+            ).strftime("%Y-%m-%d")
+            await engine.state.save_status_fields(
+                day_start_equity=acc.equity, pnl_today=0.0, day_key=today
+            )
+            engine.risk.restore_day_start(acc.equity, today)
+    except Exception as exc:  # noqa: BLE001
+        print(f"startup balance soft-fail: {exc}", flush=True)
 
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
-            loop.add_signal_handler(sig, _stop)
-        except NotImplementedError:
-            pass
+    if not await engine.state.get_active_goal():
+        await engine.handle_user_text(
+            "FX multi scalp: часті маленькі угоди по валютах, ціль 1$ на день"
+        )
 
+    print("Buckets:", engine.buckets.snapshot(), flush=True)
     print(
         f"Control Center: http://0.0.0.0:{settings.dashboard_port}/",
         flush=True,
@@ -137,7 +134,18 @@ async def main() -> None:
         flush=True,
     )
 
-    serve_task = asyncio.create_task(server.serve(), name="dashboard")
+    stop = asyncio.Event()
+
+    def _stop(*_a: object) -> None:
+        stop.set()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _stop)
+        except NotImplementedError:
+            pass
+
     await stop.wait()
     server.should_exit = True
     serve_task.cancel()
