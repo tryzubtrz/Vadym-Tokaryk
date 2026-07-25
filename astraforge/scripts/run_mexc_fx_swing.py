@@ -44,14 +44,16 @@ def _default_state() -> dict[str, Any]:
         "symbol": os.environ.get("MEXC_FX_SYMBOL") or DEFAULT_SYMBOL,
         "bankroll_usdc": 20.0,
         "target_notional_usdc": 8.0,  # ~40% of $20, like Kraken working capital
-        "min_tp_pct": 0.30,  # faster than 0.45, still > RT~0.16%
-        "early_tp_pct": 0.22,
-        "early_after_sec": 1_200,  # 20m
-        "stop_pct": 0.55,
-        "max_hold_sec": 14_400,  # 4h (was 12h)
-        "open_cooldown_sec": 900,  # 15 min (was 45)
+        "min_tp_pct": 0.24,
+        "early_tp_pct": 0.18,
+        "early_after_sec": 600,  # 10m
+        "stale_tp_pct": 0.12,
+        "stale_after_sec": 1_500,  # 25m
+        "stop_pct": 0.45,
+        "max_hold_sec": 3_600,  # 1h hard cap
+        "open_cooldown_sec": 300,  # 5 min
         "range_lookback": 40,
-        "buy_zone_pct": 0.40,  # wider buy-low zone
+        "buy_zone_pct": 0.45,
         "leverage": 1,
         "open": None,
         "last_open_at": "",
@@ -87,12 +89,23 @@ def load_state() -> dict[str, Any]:
         max(float(base.get("target_notional_usdc") or 8.0), 3.0),
         float(base["bankroll_usdc"]) * 0.55,
     )
-    base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.30), 0.22)
-    base["early_tp_pct"] = max(float(base.get("early_tp_pct") or 0.22), 0.18)
-    base["early_after_sec"] = min(max(float(base.get("early_after_sec") or 1200), 300), 7200)
-    base["buy_zone_pct"] = min(max(float(base.get("buy_zone_pct") or 0.40), 0.20), 0.50)
-    base["open_cooldown_sec"] = min(max(float(base.get("open_cooldown_sec") or 900), 180), 3600)
-    base["max_hold_sec"] = min(max(float(base.get("max_hold_sec") or 14400), 1800), 43200)
+    if os.environ.get("MEXC_SPEED_MODE", "true").lower() in {"1", "true", "yes"}:
+        base["min_tp_pct"] = 0.24
+        base["early_tp_pct"] = 0.18
+        base["early_after_sec"] = 600
+        base["stale_tp_pct"] = 0.12
+        base["stale_after_sec"] = 1_500
+        base["stop_pct"] = 0.45
+        base["max_hold_sec"] = 3_600
+        base["open_cooldown_sec"] = 300
+        base["buy_zone_pct"] = 0.45
+    else:
+        base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.24), 0.20)
+        base["early_tp_pct"] = max(float(base.get("early_tp_pct") or 0.18), 0.16)
+        base["early_after_sec"] = min(max(float(base.get("early_after_sec") or 600), 180), 7200)
+        base["buy_zone_pct"] = min(max(float(base.get("buy_zone_pct") or 0.45), 0.20), 0.55)
+        base["open_cooldown_sec"] = min(max(float(base.get("open_cooldown_sec") or 300), 60), 3600)
+        base["max_hold_sec"] = min(max(float(base.get("max_hold_sec") or 3600), 600), 14400)
     if not isinstance(base.get("trade_log"), list):
         base["trade_log"] = []
     return base
@@ -283,17 +296,19 @@ class MexcFxSwing:
         entry = float(open_pos["entry"])
         px = m["bid"]
         pnl_pct = (px - entry) / entry * 100.0
-        min_tp = float(self.state.get("min_tp_pct") or 0.30)
-        early_tp = float(self.state.get("early_tp_pct") or 0.22)
-        early_after = float(self.state.get("early_after_sec") or 1200)
-        stop_pct = float(self.state.get("stop_pct") or 0.55)
+        min_tp = float(self.state.get("min_tp_pct") or 0.24)
+        early_tp = float(self.state.get("early_tp_pct") or 0.18)
+        early_after = float(self.state.get("early_after_sec") or 600)
+        stale_tp = float(self.state.get("stale_tp_pct") or 0.12)
+        stale_after = float(self.state.get("stale_after_sec") or 1500)
+        stop_pct = float(self.state.get("stop_pct") or 0.45)
         age = 0.0
         try:
             opened = datetime.fromisoformat(str(open_pos.get("opened_at") or "").replace("Z", "+00:00"))
             age = (datetime.now(timezone.utc) - opened).total_seconds()
         except Exception:
             age = 0.0
-        max_hold = float(self.state.get("max_hold_sec") or 14_400)
+        max_hold = float(self.state.get("max_hold_sec") or 3600)
 
         action = None
         reason = ""
@@ -301,13 +316,20 @@ class MexcFxSwing:
             action, reason = "tp", f"+{pnl_pct:.3f}%>= {min_tp:.2f}%"
         elif age >= early_after and pnl_pct >= early_tp:
             action, reason = "early", f"+{pnl_pct:.3f}%>= {early_tp:.2f}% after {age/60:.0f}m"
+        elif age >= stale_after and pnl_pct >= stale_tp:
+            action, reason = "stale", f"+{pnl_pct:.3f}%>= {stale_tp:.2f}% stale {age/60:.0f}m"
         elif pnl_pct <= -stop_pct:
             action, reason = "sl", f"{pnl_pct:.3f}%<= -{stop_pct:.2f}%"
         elif age >= max_hold:
-            action, reason = "time", f"held {age/3600:.1f}h pnl={pnl_pct:+.3f}%"
+            action, reason = "time", f"held {age/60:.0f}m pnl={pnl_pct:+.3f}% (no endless wait)"
 
         if not action:
-            return f"hold long {pnl_pct:+.3f}% need+{min_tp:.2f}%/early+{early_tp:.2f}% age={age:.0f}s px={px}"
+            return (
+                f"hold long {pnl_pct:+.3f}% need+{min_tp:.2f}%/"
+                f"e+{early_tp:.2f}%@{early_after/60:.0f}m/"
+                f"s+{stale_tp:.2f}%@{stale_after/60:.0f}m "
+                f"max{max_hold/60:.0f}m age={age:.0f}s px={px}"
+            )
 
         amount = float(open_pos["contracts"])
         csize = float((self.market or {}).get("contractSize") or 1)

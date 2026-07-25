@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p logs
+export MEXC_SPEED_MODE="${MEXC_SPEED_MODE:-true}"
 export MEXC_LIVE_CONFIRMED="${MEXC_LIVE_CONFIRMED:-true}"
 export MEXC_MICRO_LOOP_SEC="${MEXC_MICRO_LOOP_SEC:-45}"
 while true; do

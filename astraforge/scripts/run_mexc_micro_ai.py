@@ -45,14 +45,16 @@ def _default_state() -> dict[str, Any]:
         "stake_usdc": 1.0,
         "max_loss_usdc": 5.0,
         "max_losses": 5,  # hard stop after 5 losing $1 tickets
-        "min_tp_pct": 0.28,  # RT~0.16% + thin buffer (faster exits)
-        "early_tp_pct": 0.20,  # after early_after_sec, take green above fees
-        "early_after_sec": 900,  # 15m
-        "stop_pct": 0.45,
-        "max_hold_sec": 2_700,  # 45m
-        "cooldown_sec": 180,
-        "min_score": 0.42,
-        "base_min_score": 0.42,
+        "min_tp_pct": 0.24,  # just above RT~0.16%
+        "early_tp_pct": 0.18,
+        "early_after_sec": 480,  # 8m
+        "stale_tp_pct": 0.12,  # after stale_after_sec take tiny green / cut wait
+        "stale_after_sec": 1_200,  # 20m
+        "stop_pct": 0.40,
+        "max_hold_sec": 1_800,  # 30m hard flat/exit — no endless holds
+        "cooldown_sec": 90,
+        "min_score": 0.40,
+        "base_min_score": 0.40,
         "learn_score_step": 0.03,
         "leverage": 1,
         "open": None,
@@ -88,15 +90,28 @@ def load_state() -> dict[str, Any]:
     base["leverage"] = 1
     base["bankroll_usdc"] = min(max(float(base.get("bankroll_usdc") or 5.0), 1.0), 5.0)
     base["stake_usdc"] = min(max(float(base.get("stake_usdc") or 1.0), 0.5), 1.0)
-    base["max_loss_usdc"] = min(float(base.get("max_loss_usdc") or 5.0), 5.0)
+    # Speed profile: never wait forever (override stale JSON from older runs)
+    if os.environ.get("MEXC_SPEED_MODE", "true").lower() in {"1", "true", "yes"}:
+        base["min_tp_pct"] = 0.24
+        base["early_tp_pct"] = 0.18
+        base["early_after_sec"] = 480
+        base["stale_tp_pct"] = 0.12
+        base["stale_after_sec"] = 1_200
+        base["stop_pct"] = 0.40
+        base["max_hold_sec"] = 1_800
+        base["cooldown_sec"] = 90
+        base["base_min_score"] = min(float(base.get("base_min_score") or 0.40), 0.40)
+        base["min_score"] = min(float(base.get("min_score") or 0.40), 0.45)
+    else:
+        base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.24), 0.20)
+        base["early_tp_pct"] = max(float(base.get("early_tp_pct") or 0.18), 0.16)
+        base["early_after_sec"] = min(max(float(base.get("early_after_sec") or 480), 180), 3600)
+        base["stale_tp_pct"] = max(float(base.get("stale_tp_pct") or 0.12), 0.08)
+        base["stale_after_sec"] = min(max(float(base.get("stale_after_sec") or 1200), 300), 3600)
+        base["cooldown_sec"] = min(max(float(base.get("cooldown_sec") or 90), 45), 3600)
+        base["max_hold_sec"] = min(max(float(base.get("max_hold_sec") or 1800), 300), 3600)
     base["max_losses"] = int(min(max(int(base.get("max_losses") or 5), 1), 5))
-    base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.28), 0.22)
-    base["early_tp_pct"] = max(float(base.get("early_tp_pct") or 0.20), 0.18)
-    base["early_after_sec"] = min(max(float(base.get("early_after_sec") or 900), 300), 3600)
-    base["base_min_score"] = min(max(float(base.get("base_min_score") or 0.42), 0.35), 0.70)
-    base["min_score"] = min(max(float(base.get("min_score") or base["base_min_score"]), 0.35), 0.70)
-    base["cooldown_sec"] = min(max(float(base.get("cooldown_sec") or 180), 60), 3600)
-    base["max_hold_sec"] = min(max(float(base.get("max_hold_sec") or 2700), 600), 7200)
+    base["max_loss_usdc"] = min(float(base.get("max_loss_usdc") or 5.0), 5.0)
     if not isinstance(base.get("trade_log"), list):
         base["trade_log"] = []
     if not isinstance(base.get("lessons"), list):
@@ -504,17 +519,19 @@ class MexcMicroAI:
         entry = float(open_pos["entry"])
         px = m["bid"]
         pnl_pct = (px - entry) / entry * 100.0
-        min_tp = float(self.state.get("min_tp_pct") or 0.28)
-        early_tp = float(self.state.get("early_tp_pct") or 0.20)
-        early_after = float(self.state.get("early_after_sec") or 900)
-        stop_pct = float(self.state.get("stop_pct") or 0.45)
+        min_tp = float(self.state.get("min_tp_pct") or 0.24)
+        early_tp = float(self.state.get("early_tp_pct") or 0.18)
+        early_after = float(self.state.get("early_after_sec") or 480)
+        stale_tp = float(self.state.get("stale_tp_pct") or 0.12)
+        stale_after = float(self.state.get("stale_after_sec") or 1200)
+        stop_pct = float(self.state.get("stop_pct") or 0.40)
         age = 0.0
         try:
             opened = datetime.fromisoformat(str(open_pos.get("opened_at") or "").replace("Z", "+00:00"))
             age = (datetime.now(timezone.utc) - opened).total_seconds()
         except Exception:
             age = 0.0
-        max_hold = float(self.state.get("max_hold_sec") or 2700)
+        max_hold = float(self.state.get("max_hold_sec") or 1800)
 
         action = None
         reason = ""
@@ -522,13 +539,20 @@ class MexcMicroAI:
             action, reason = "tp", f"+{pnl_pct:.3f}%>= {min_tp:.2f}%"
         elif age >= early_after and pnl_pct >= early_tp:
             action, reason = "early", f"+{pnl_pct:.3f}%>= {early_tp:.2f}% after {age/60:.0f}m"
+        elif age >= stale_after and pnl_pct >= stale_tp:
+            action, reason = "stale", f"+{pnl_pct:.3f}%>= {stale_tp:.2f}% stale {age/60:.0f}m"
         elif pnl_pct <= -stop_pct:
             action, reason = "sl", f"{pnl_pct:.3f}%<= -{stop_pct:.2f}%"
         elif age >= max_hold:
-            action, reason = "time", f"held {age/60:.0f}m pnl={pnl_pct:+.3f}%"
+            action, reason = "time", f"held {age/60:.0f}m pnl={pnl_pct:+.3f}% (no endless wait)"
 
         if not action:
-            return f"hold long {pnl_pct:+.3f}% need+{min_tp:.2f}% age={age:.0f}s"
+            return (
+                f"hold long {pnl_pct:+.3f}% need+{min_tp:.2f}%/"
+                f"e+{early_tp:.2f}%@{early_after/60:.0f}m/"
+                f"s+{stale_tp:.2f}%@{stale_after/60:.0f}m "
+                f"max{max_hold/60:.0f}m age={age:.0f}s"
+            )
 
         amount = float(open_pos["contracts"])
         csize = float((self.market or {}).get("contractSize") or 1)
