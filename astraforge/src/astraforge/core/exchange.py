@@ -21,26 +21,38 @@ logger = get_logger(__name__)
 
 def summarize_order_book(raw: dict[str, Any], depth: int = 10) -> dict[str, Any]:
     """Compress an L2 book into signals an LLM can reason about."""
-    bids = (raw.get("bids") or [])[:depth]
-    asks = (raw.get("asks") or [])[:depth]
-    bid_vol = sum(float(x[1]) for x in bids) if bids else 0.0
-    ask_vol = sum(float(x[1]) for x in asks) if asks else 0.0
-    best_bid = float(bids[0][0]) if bids else 0.0
-    best_ask = float(asks[0][0]) if asks else 0.0
+
+    def _level(item: Any) -> tuple[float, float] | None:
+        try:
+            # CCXT usually [price, amount]; some venues add extra fields
+            price = float(item[0])
+            amount = float(item[1])
+            return price, amount
+        except Exception:  # noqa: BLE001
+            return None
+
+    bids_raw = (raw.get("bids") or [])[:depth]
+    asks_raw = (raw.get("asks") or [])[:depth]
+    bids = [lvl for lvl in (_level(x) for x in bids_raw) if lvl]
+    asks = [lvl for lvl in (_level(x) for x in asks_raw) if lvl]
+    bid_vol = sum(a for _, a in bids) if bids else 0.0
+    ask_vol = sum(a for _, a in asks) if asks else 0.0
+    best_bid = bids[0][0] if bids else 0.0
+    best_ask = asks[0][0] if asks else 0.0
     mid = (best_bid + best_ask) / 2 if best_bid and best_ask else 0.0
     spread = (best_ask - best_bid) if best_bid and best_ask else 0.0
     spread_bps = (spread / mid * 10_000) if mid else 0.0
     total = bid_vol + ask_vol
     imbalance = ((bid_vol - ask_vol) / total) if total > 0 else 0.0
-    # Simple wall detection: largest level vs average
-    def _wall(levels: list) -> dict[str, float] | None:
+
+    def _wall(levels: list[tuple[float, float]]) -> dict[str, float] | None:
         if not levels:
             return None
-        sizes = [float(x[1]) for x in levels]
+        sizes = [a for _, a in levels]
         avg = sum(sizes) / len(sizes)
         idx = max(range(len(sizes)), key=lambda i: sizes[i])
         if sizes[idx] >= avg * 2.5:
-            return {"price": float(levels[idx][0]), "size": sizes[idx]}
+            return {"price": levels[idx][0], "size": sizes[idx]}
         return None
 
     pressure = "neutral"
@@ -57,12 +69,12 @@ def summarize_order_book(raw: dict[str, Any], depth: int = 10) -> dict[str, Any]
         "spread_bps": round(spread_bps, 2),
         "bid_volume": round(bid_vol, 4),
         "ask_volume": round(ask_vol, 4),
-        "imbalance": round(imbalance, 4),  # + = more bids (buy pressure)
+        "imbalance": round(imbalance, 4),
         "pressure": pressure,
         "bid_wall": _wall(bids),
         "ask_wall": _wall(asks),
-        "top_bids": [[float(p), float(s)] for p, s in bids[:5]],
-        "top_asks": [[float(p), float(s)] for p, s in asks[:5]],
+        "top_bids": [[p, a] for p, a in bids[:5]],
+        "top_asks": [[p, a] for p, a in asks[:5]],
     }
 
 
@@ -98,7 +110,8 @@ class ExchangeClient:
         class_map = {
             "binance": ccxt.binanceusdm,
             "bybit": ccxt.bybit,
-            "kraken": ccxt.krakenfutures,
+            "kraken": ccxt.kraken,  # Spot (Kraken Pro)
+            "kraken_futures": ccxt.krakenfutures,
         }
         cls = class_map.get(exchange_id)
         if cls is None:
@@ -110,19 +123,23 @@ class ExchangeClient:
             "enableRateLimit": True,
             "options": {"defaultType": "swap"},
         }
-        # Kraken Futures uses USD-margined linear perps by default
         if exchange_id == "kraken":
+            params["options"] = {"defaultType": "spot"}
+        elif exchange_id == "kraken_futures":
             params["options"] = {"defaultType": "future"}
 
         self._exchange = cls(params)
 
-        if self.is_paper:
-            # Prefer testnet / sandbox
+        # Spot has no useful public sandbox with these keys — stay on live markets
+        # but paper mode still uses local ledger for orders unless LIVE confirmed.
+        if self.is_paper and exchange_id not in {"kraken"}:
             try:
                 self._exchange.set_sandbox_mode(True)
                 logger.info("exchange_sandbox_enabled", exchange=exchange_id)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("sandbox_mode_failed", error=str(exc))
+        elif self.is_paper and exchange_id == "kraken":
+            logger.info("kraken_spot_paper_uses_live_market_data_local_orders")
 
         try:
             await self._exchange.load_markets()

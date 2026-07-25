@@ -157,6 +157,13 @@ class RiskManager:
         if decision.action not in (ActionType.OPEN_LONG, ActionType.OPEN_SHORT):
             return RiskCheckResult(allowed=False, reason="Unknown action")
 
+        # Spot markets: no leveraged shorts
+        if self.settings.is_spot and decision.action == ActionType.OPEN_SHORT:
+            return RiskCheckResult(
+                allowed=False,
+                reason="Spot mode: shorts disabled (buy/sell only)",
+            )
+
         open_count = len(account.positions)
         if open_count >= int(self.settings.max_open_positions):
             # Allow if reducing exposure on same symbol later; block new opens
@@ -169,8 +176,12 @@ class RiskManager:
 
         max_lev = min(self._limits["max_leverage"], HARD_MAX_LEVERAGE)
         max_pos = min(self._limits["max_position_pct"], HARD_MAX_POSITION_PCT)
+        if self.settings.is_spot:
+            max_lev = 1.0
 
         adj = decision.model_copy(deep=True)
+        if self.settings.is_spot:
+            adj.leverage = 1.0
         if adj.leverage > max_lev:
             logger.warning(
                 "leverage_clamped",

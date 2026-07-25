@@ -71,13 +71,21 @@ SYMBOLS_DEFAULT = [
     "BNB/USDT:USDT",
     "XRP/USDT:USDT",
 ]
-KRAKEN_SYMBOLS = [
+KRAKEN_SPOT_SYMBOLS = [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "XRP/USD",
+]
+KRAKEN_FUTURES_SYMBOLS = [
     "BTC/USD:USD",
     "ETH/USD:USD",
     "SOL/USD:USD",
     "BNB/USD:USD",
     "XRP/USD:USD",
 ]
+# backwards-compatible alias
+KRAKEN_SYMBOLS = list(KRAKEN_SPOT_SYMBOLS)
 SYMBOLS = list(SYMBOLS_DEFAULT)
 DB_PATH = Path(__file__).resolve().parent / "data" / "astraforge_one.db"
 PAPER_START_EQUITY = 10_000.0
@@ -197,11 +205,14 @@ def load_config_interactive() -> Config:
         print("ERROR: Exchange API key + secret are required.")
         raise SystemExit(1)
 
-    # Kraken Futures uses USD-margined symbols
+    # Kraken: default Spot (Pro keys). Use kraken_futures for Futures keys.
     global SYMBOLS
-    if cfg.exchange_id in {"kraken", "krakenfutures"}:
+    if cfg.exchange_id in {"kraken", "kraken_spot"}:
         cfg.exchange_id = "kraken"
-        SYMBOLS = list(KRAKEN_SYMBOLS)
+        SYMBOLS = list(KRAKEN_SPOT_SYMBOLS)
+    elif cfg.exchange_id in {"kraken_futures", "krakenfutures"}:
+        cfg.exchange_id = "kraken_futures"
+        SYMBOLS = list(KRAKEN_FUTURES_SYMBOLS)
 
     if not cfg.telegram_token:
         tg = ask("Telegram bot token (Enter to skip — use console chat)")
@@ -419,12 +430,15 @@ class Exchange:
         cls = {
             "binance": ccxt.binanceusdm,
             "bybit": ccxt.bybit,
-            "kraken": ccxt.krakenfutures,
+            "kraken": ccxt.kraken,
+            "kraken_futures": ccxt.krakenfutures,
         }.get(self.cfg.exchange_id)
         if not cls:
             raise SystemExit(f"Unsupported exchange: {self.cfg.exchange_id}")
         options: dict[str, Any] = {"defaultType": "swap"}
         if self.cfg.exchange_id == "kraken":
+            options = {"defaultType": "spot"}
+        elif self.cfg.exchange_id == "kraken_futures":
             options = {"defaultType": "future"}
         self.ex = cls(
             {
@@ -434,12 +448,14 @@ class Exchange:
                 "options": options,
             }
         )
-        if self.cfg.mode == "paper":
+        if self.cfg.mode == "paper" and self.cfg.exchange_id != "kraken":
             try:
                 self.ex.set_sandbox_mode(True)
                 print("✓ Sandbox/testnet enabled")
             except Exception as e:  # noqa: BLE001
                 print(f"Sandbox note: {e}")
+        elif self.cfg.mode == "paper" and self.cfg.exchange_id == "kraken":
+            print("✓ Kraken Spot: live prices, paper orders (safe)")
         try:
             await self.ex.load_markets()
             self.markets_ok = True
@@ -1101,6 +1117,17 @@ class Engine:
             decisions = heuristic_decide(
                 ind_only, acc["positions"], self.goal, pnl, len(acc["positions"])
             )
+
+        # Reject shorts in spot one-file path
+        if self.cfg.exchange_id == "kraken":
+            decisions = [
+                d
+                if d.action != Action.OPEN_SHORT
+                else Decision(Action.HOLD, confidence=0.4, reasoning="Spot: no short")
+                for d in decisions
+            ]
+            for d in decisions:
+                d.leverage = 1.0
 
         results = []
         for d in decisions:

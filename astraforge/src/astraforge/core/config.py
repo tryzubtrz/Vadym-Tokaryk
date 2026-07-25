@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     telegram_allowed_user_ids: str = ""
 
     # Exchange
-    exchange_id: Literal["binance", "bybit", "kraken"] = "binance"
+    # Exchange: binance/bybit = USDT perps; kraken = Spot; kraken_futures = Kraken Futures
+    exchange_id: Literal["binance", "bybit", "kraken", "kraken_futures"] = "binance"
     exchange_api_key: str = ""
     exchange_api_secret: str = ""
 
@@ -116,9 +117,14 @@ class Settings(BaseSettings):
     @property
     def symbols(self) -> list[str]:
         raw = [s.strip() for s in self.trade_symbols.split(",") if s.strip()]
-        if self.exchange_id == "kraken":
-            return [normalize_symbol_for_exchange(s, "kraken") for s in raw]
+        if self.exchange_id in {"kraken", "kraken_futures"}:
+            return [normalize_symbol_for_exchange(s, self.exchange_id) for s in raw]
         return raw
+
+    @property
+    def is_spot(self) -> bool:
+        """Kraken Pro Spot (no leverage / no short by default)."""
+        return self.exchange_id == "kraken"
 
     @property
     def is_paper(self) -> bool:
@@ -136,26 +142,45 @@ class Settings(BaseSettings):
 
 
 def normalize_symbol_for_exchange(symbol: str, exchange_id: str) -> str:
-    """Map common USDT-perp symbols onto exchange-native symbols."""
-    if exchange_id != "kraken":
+    """Map common symbols onto exchange-native markets."""
+    if exchange_id == "kraken":
+        # Spot pairs
+        spot_map = {
+            "BTC/USDT:USDT": "BTC/USD",
+            "ETH/USDT:USDT": "ETH/USD",
+            "SOL/USDT:USDT": "SOL/USD",
+            "BNB/USDT:USDT": "BNB/USD",
+            "XRP/USDT:USDT": "XRP/USD",
+            "BTC/USD:USD": "BTC/USD",
+            "ETH/USD:USD": "ETH/USD",
+            "SOL/USD:USD": "SOL/USD",
+            "BNB/USD:USD": "BNB/USD",
+            "XRP/USD:USD": "XRP/USD",
+            "BTC/USDT": "BTC/USD",
+            "ETH/USDT": "ETH/USD",
+        }
+        return spot_map.get(symbol, symbol)
+
+    if exchange_id == "kraken_futures":
+        mapping = {
+            "BTC/USDT:USDT": "BTC/USD:USD",
+            "ETH/USDT:USDT": "ETH/USD:USD",
+            "SOL/USDT:USDT": "SOL/USD:USD",
+            "BNB/USDT:USDT": "BNB/USD:USD",
+            "XRP/USDT:USDT": "XRP/USD:USD",
+            "BTC/USDT": "BTC/USD:USD",
+            "ETH/USDT": "ETH/USD:USD",
+            "BTC/USD": "BTC/USD:USD",
+            "ETH/USD": "ETH/USD:USD",
+        }
+        if symbol in mapping:
+            return mapping[symbol]
+        if symbol.endswith(":USD") or "/USD:" in symbol:
+            return symbol
+        if ":USDT" in symbol:
+            return symbol.replace("USDT", "USD")
         return symbol
-    mapping = {
-        "BTC/USDT:USDT": "BTC/USD:USD",
-        "ETH/USDT:USDT": "ETH/USD:USD",
-        "SOL/USDT:USDT": "SOL/USD:USD",
-        "BNB/USDT:USDT": "BNB/USD:USD",
-        "XRP/USDT:USDT": "XRP/USD:USD",
-        "BTC/USDT": "BTC/USD:USD",
-        "ETH/USDT": "ETH/USD:USD",
-    }
-    if symbol in mapping:
-        return mapping[symbol]
-    # Already Kraken-style
-    if symbol.endswith(":USD") or "/USD" in symbol:
-        return symbol
-    # Generic USDT swap → USD linear on Kraken Futures
-    if ":USDT" in symbol:
-        return symbol.replace("USDT", "USD")
+
     return symbol
 
 
