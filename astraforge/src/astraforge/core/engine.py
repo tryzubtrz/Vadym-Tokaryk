@@ -246,18 +246,30 @@ class TradingEngine:
                 closed_ok = [
                     c
                     for c in (closed_only or [])
-                    if c.get("ok") and not c.get("held") and c.get("action") != "hold"
+                    if c.get("ok")
+                    and not c.get("held")
+                    and c.get("action") not in {"hold", "absorb_cash"}
+                ]
+                absorbs = [
+                    c
+                    for c in (closed_only or [])
+                    if c.get("ok") and c.get("action") == "absorb_cash"
                 ]
                 holds = [
                     c
                     for c in (closed_only or [])
                     if c.get("ok") and (c.get("held") or c.get("action") == "hold")
                 ]
-                if closed_ok or holds:
+                if closed_ok or holds or absorbs:
                     parts = [
                         f"FX close {c.get('symbol')} pnl={float(c.get('pnl') or 0):+.4f}"
                         for c in closed_ok
                     ]
+                    parts.extend(
+                        f"FX absorb {c.get('symbol')} keep-cash "
+                        f"{float(c.get('pnl_pct') or 0):+.3f}%"
+                        for c in absorbs
+                    )
                     parts.extend(
                         f"FX hold {c.get('symbol')} {float(c.get('pnl_pct') or 0):+.3f}% "
                         f"{float(c.get('age_sec') or 0):.0f}s"
