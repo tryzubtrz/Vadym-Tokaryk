@@ -73,8 +73,13 @@ class RiskManager:
         if equity > self._peak_equity:
             self._peak_equity = equity
 
-    def restore_peak(self, peak: float) -> None:
-        self._peak_equity = max(self._peak_equity, peak)
+    def restore_peak(self, peak: float, *, force: bool = False) -> None:
+        """Restore peak. Use force=True to recalibrate after strategy switch / crypto drag."""
+        p = max(0.0, float(peak or 0))
+        if force:
+            self._peak_equity = p
+        else:
+            self._peak_equity = max(self._peak_equity, p)
 
     def restore_day_start(self, equity: float, day_key: str) -> None:
         self._day_start_equity = equity

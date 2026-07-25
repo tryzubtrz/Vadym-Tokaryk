@@ -34,7 +34,7 @@ risk_profiles:
     target_aggression: 0.35
   balanced:
     daily_loss_limit_pct: 2.5
-    max_drawdown_pct: 6.0
+    max_drawdown_pct: 7.0
     max_leverage: 5
     max_position_pct: 3.5
     target_aggression: 0.6

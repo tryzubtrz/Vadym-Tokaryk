@@ -127,13 +127,14 @@ async def main() -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"bucket FX-only soft-fail: {exc}", flush=True)
 
-    # Recalibrate peak after strategy switch (crypto drag must not keep FX paused)
+    # Recalibrate peak after FX-only switch (crypto drag must not keep FX paused)
     try:
         peak = float(await engine.state.get_kv("peak_equity", 0) or 0)
-        acc = await engine.exchange.get_account_snapshot(peak_equity=peak, force=True)
-        if acc.equity > 0 and (peak <= 0 or (peak - acc.equity) / peak > 0.05):
+        acc = await engine.exchange.get_account_snapshot(peak_equity=0.0, force=True)
+        if acc.equity > 0:
             await engine.state.set_kv("peak_equity", acc.equity)
-            print(f"peak_equity recalibrated to {acc.equity:.4f}", flush=True)
+            engine.risk.restore_peak(acc.equity, force=True)
+            print(f"peak_equity recalibrated to {acc.equity:.4f} (was {peak:.4f})", flush=True)
         await engine.breaker.reset(force_daily=True)
         await engine.state.save_status_fields(trading_enabled=True)
     except Exception as exc:  # noqa: BLE001
