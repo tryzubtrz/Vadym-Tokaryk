@@ -101,6 +101,9 @@ class ExchangeClient:
         self._spot_cost_basis: dict[str, dict[str, float]] = {}
         self._private_lock = asyncio.Lock()
         self._last_private_ts = 0.0
+        self._account_cache: AccountSnapshot | None = None
+        self._account_cache_at: float = 0.0
+        self._account_cache_ttl: float = 15.0
 
     @property
     def mode(self) -> TradingMode:
@@ -303,7 +306,20 @@ class ExchangeClient:
                 await self.breaker.trip(BreakerReason.API_ERROR, detail=str(exc))
             return self._paper_position_infos() if self.is_paper else []
 
-    async def get_account_snapshot(self, peak_equity: float = 0.0) -> AccountSnapshot:
+    async def get_account_snapshot(
+        self, peak_equity: float = 0.0, *, force: bool = False
+    ) -> AccountSnapshot:
+        import time as _time
+
+        # Short TTL cache — dashboard polls often; Kraken private calls are slow
+        if (
+            not force
+            and not self.is_paper
+            and self._account_cache is not None
+            and (_time.time() - self._account_cache_at) < self._account_cache_ttl
+        ):
+            return self._account_cache
+
         # Paper mode: always use simulated ledger + live marks when possible
         if self.is_paper:
             positions = self._paper_position_infos()
@@ -422,7 +438,7 @@ class ExchangeClient:
         peak = max(peak_equity, total)
         dd = ((peak - total) / peak * 100.0) if peak > 0 else 0.0
 
-        return AccountSnapshot(
+        snap = AccountSnapshot(
             equity=total,
             available_balance=free,
             used_margin=max(0.0, total - free),
@@ -433,6 +449,9 @@ class ExchangeClient:
             positions=positions,
             mode=self.mode,
         )
+        self._account_cache = snap
+        self._account_cache_at = _time.time()
+        return snap
 
     def set_spot_cost_basis(self, basis: dict[str, dict[str, float]]) -> None:
         """Restore / replace spot average entries (survives process restarts via state)."""
@@ -717,6 +736,8 @@ class ExchangeClient:
                 reduce_only=reduce_only,
                 id=order.get("id"),
             )
+            self._account_cache = None
+            self._account_cache_at = 0.0
             return order
         except Exception as exc:  # noqa: BLE001
             logger.error("order_failed", error=str(exc), symbol=symbol, side=side)

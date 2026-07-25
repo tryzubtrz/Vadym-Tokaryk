@@ -689,16 +689,21 @@ class TradingEngine:
         await self.state.save_status_fields(trading_enabled=True)
         return "✅ Trading resumed (within risk limits)."
 
-    async def get_status_model(self):
+    async def get_status_model(self, *, live: bool = True):
         peak = float(await self.state.get_kv("peak_equity", 0.0) or 0.0)
-        try:
-            account = await self.exchange.get_account_snapshot(peak_equity=peak)
-            equity = account.equity
-            open_pos = len(account.positions)
-        except Exception:  # noqa: BLE001
+        equity = 0.0
+        open_pos = 0
+        if live:
+            try:
+                account = await self.exchange.get_account_snapshot(peak_equity=peak)
+                equity = account.equity
+                open_pos = len(account.positions)
+            except Exception:  # noqa: BLE001
+                live = False
+        if not live:
             last = await self.state.get_kv("last_equity", {}) or {}
-            equity = float(last.get("equity") or 0)
-            open_pos = 0
+            equity = float(last.get("equity") or peak or 0)
+            open_pos = int(self.buckets.open_slot_count())
 
         return await self.state.build_bot_status(
             running=self._running,

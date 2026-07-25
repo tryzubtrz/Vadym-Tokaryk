@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>AstraForge</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <title>AstraForge</title>
   <style>
     :root {
       --bg0: #071018;
@@ -22,135 +20,117 @@
       --warn: #f0b429;
       --accent: #2ec4b6;
       --accent2: #4cc9f0;
-      --radius: 18px;
-      --safe-bottom: max(18px, env(safe-area-inset-bottom));
-      --tab-h: 64px;
+      --radius: 16px;
+      --safe-bottom: max(14px, env(safe-area-inset-bottom));
+      --tab-h: 60px;
+      --font: "Avenir Next", "Segoe UI", "Trebuchet MS", sans-serif;
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     }
     * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
     body {
       margin: 0;
-      font-family: "Outfit", system-ui, sans-serif;
+      font-family: var(--font);
       color: var(--text);
-      background:
-        radial-gradient(900px 520px at 0% -10%, rgba(46,196,182,.18), transparent 55%),
-        radial-gradient(800px 480px at 100% 0%, rgba(76,201,240,.12), transparent 50%),
-        linear-gradient(180deg, #08131c 0%, var(--bg0) 40%, #050b11 100%);
+      background: linear-gradient(180deg, #0a1620 0%, var(--bg0) 45%, #050b11 100%);
       min-height: 100vh;
-      padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 28px);
+      padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 20px);
+      -webkit-font-smoothing: antialiased;
     }
     header {
       position: sticky; top: 0; z-index: 20;
-      backdrop-filter: blur(16px);
-      background: rgba(7,16,24,.78);
+      background: rgba(7,16,24,.96);
       border-bottom: 1px solid var(--line);
-      padding: .85rem 1rem;
+      padding: .75rem 1rem;
       display: flex; justify-content: space-between; align-items: center;
     }
-    .brand {
-      display: flex; align-items: center; gap: .65rem;
-    }
+    .brand { display: flex; align-items: center; gap: .6rem; }
     .logo {
-      width: 34px; height: 34px; border-radius: 10px;
+      width: 32px; height: 32px; border-radius: 9px;
       background: linear-gradient(135deg, var(--accent), var(--accent2));
-      box-shadow: 0 8px 24px rgba(46,196,182,.25);
     }
-    header h1 { margin: 0; font-size: 1.15rem; letter-spacing: -.03em; font-weight: 800; }
+    header h1 { margin: 0; font-size: 1.1rem; letter-spacing: -.03em; font-weight: 800; }
     .pill {
-      font-size: .72rem; padding: .28rem .6rem; border-radius: 999px;
-      border: 1px solid var(--line); color: var(--muted); font-family: "IBM Plex Mono", monospace;
+      font-size: .7rem; padding: .25rem .55rem; border-radius: 999px;
+      border: 1px solid var(--line); color: var(--muted); font-family: var(--mono);
     }
     .pill.on { color: var(--ok); border-color: rgba(61,214,140,.35); }
     .pill.off { color: var(--bad); border-color: rgba(255,93,108,.35); }
-    main { max-width: 980px; margin: 0 auto; padding: 1rem; }
-    .lego {
-      display: grid; gap: .85rem;
-      grid-template-columns: repeat(2, 1fr);
-    }
+    main { max-width: 980px; margin: 0 auto; padding: .85rem; }
+    .lego { display: grid; gap: .7rem; grid-template-columns: repeat(2, 1fr); }
     @media (min-width: 760px) { .lego.cols-4 { grid-template-columns: repeat(4, 1fr); } }
     .brick {
-      background: linear-gradient(180deg, rgba(24,48,68,.95), rgba(14,28,40,.92));
+      background: var(--brick);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: .95rem;
-      position: relative;
-      overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0,0,0,.18);
+      padding: .85rem;
     }
-    .brick::before {
-      content: ""; position: absolute; top: 8px; left: 14px; right: 14px; height: 7px;
-      background: radial-gradient(circle, rgba(255,255,255,.16) 0 3px, transparent 4px);
-      background-size: 16px 8px; opacity: .55; pointer-events: none;
-    }
-    .brick .label { color: var(--muted); font-size: .78rem; margin-top: .15rem; }
-    .brick .value { font-size: 1.2rem; margin-top: .35rem; font-variant-numeric: tabular-nums; font-weight: 700; }
-    section { margin-top: 1.1rem; }
+    .brick .label { color: var(--muted); font-size: .75rem; }
+    .brick .value { font-size: 1.1rem; margin-top: .3rem; font-variant-numeric: tabular-nums; font-weight: 700; }
+    section { margin-top: 1rem; contain: content; }
     section h2 {
-      font-size: .82rem; margin: 0 0 .65rem; color: var(--muted);
-      text-transform: uppercase; letter-spacing: .08em; font-weight: 600;
+      font-size: .78rem; margin: 0 0 .55rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .07em; font-weight: 600;
     }
-    .row { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .row { display: flex; flex-wrap: wrap; gap: .45rem; }
     button, .btn {
       appearance: none; border: 1px solid var(--line); background: var(--brick2);
-      color: var(--text); border-radius: 14px; padding: .72rem .9rem; font-size: .9rem;
+      color: var(--text); border-radius: 12px; padding: .65rem .8rem; font-size: .88rem;
       cursor: pointer; font-family: inherit; font-weight: 600;
+      touch-action: manipulation;
     }
-    button.primary {
-      background: linear-gradient(135deg, var(--accent), #239e94);
-      border: 0; color: #04201c;
-    }
+    button.primary { background: var(--accent); border: 0; color: #04201c; }
     button.danger { background: rgba(255,93,108,.12); border-color: rgba(255,93,108,.35); color: #ffc2c8; }
     button.ok { background: rgba(61,214,140,.12); border-color: rgba(61,214,140,.35); color: #baf5d7; }
-    .mono { font-family: "IBM Plex Mono", monospace; font-size: .82rem; }
-    .muted { color: var(--muted); font-size: .85rem; }
-    .panel { display: none; }
-    .panel.active { display: block; animation: rise .22s ease; }
-    @keyframes rise { from { opacity: .4; transform: translateY(8px);} to { opacity: 1; transform: none; } }
+    .mono { font-family: var(--mono); font-size: .8rem; }
+    .muted { color: var(--muted); font-size: .82rem; }
+    .panel { display: none; content-visibility: hidden; }
+    .panel.active { display: block; content-visibility: visible; }
     #chatBox, .scroll {
-      max-height: 360px; overflow: auto; background: rgba(5,12,18,.55);
-      border-radius: 14px; border: 1px solid var(--line); padding: .75rem;
+      max-height: 320px; overflow: auto; background: rgba(5,12,18,.55);
+      border-radius: 12px; border: 1px solid var(--line); padding: .7rem;
+      -webkit-overflow-scrolling: touch;
     }
-    .msg { margin: .45rem 0; max-width: 92%; padding: .6rem .75rem; border-radius: 14px; white-space: pre-wrap; line-height: 1.4; font-size: .9rem; }
+    .msg { margin: .4rem 0; max-width: 92%; padding: .55rem .7rem; border-radius: 12px; white-space: pre-wrap; line-height: 1.35; font-size: .88rem; }
     .msg.user { background: #1d3a4d; margin-left: auto; }
     .msg.bot { background: #132636; }
-    .composer { display: flex; gap: .5rem; align-items: center; }
+    .composer { display: flex; gap: .45rem; align-items: center; }
     input, select, textarea {
       width: 100%; background: #0a1620; border: 1px solid var(--line); color: var(--text);
-      border-radius: 14px; padding: .75rem .85rem; font-size: .95rem; font-family: inherit;
+      border-radius: 12px; padding: .7rem .8rem; font-size: .95rem; font-family: inherit;
     }
-    .chips { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .65rem; }
+    .chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .55rem; }
     .chip {
       border: 1px solid var(--line); background: #132636; color: var(--muted);
-      border-radius: 999px; padding: .35rem .7rem; font-size: .78rem; cursor: pointer;
+      border-radius: 999px; padding: .3rem .65rem; font-size: .75rem; cursor: pointer;
     }
     .chip.active { color: #04201c; background: var(--accent); border-color: transparent; }
     .trade-item, .news-item, .slot-item {
-      display: grid; grid-template-columns: 1fr auto; gap: .35rem .75rem;
-      padding: .8rem .15rem; border-bottom: 1px solid var(--line); cursor: pointer;
+      display: grid; grid-template-columns: 1fr auto; gap: .3rem .7rem;
+      padding: .7rem .1rem; border-bottom: 1px solid var(--line); cursor: pointer;
     }
     .pnl-plus { color: var(--ok); font-weight: 700; }
     .pnl-minus { color: var(--bad); font-weight: 700; }
-    canvas { width: 100%; height: 180px; background: #0a1620; border-radius: 14px; border: 1px solid var(--line); }
+    canvas { width: 100%; height: 160px; background: #0a1620; border-radius: 12px; border: 1px solid var(--line); }
     nav.tabs {
-      position: fixed; left: 10px; right: 10px;
-      bottom: calc(var(--safe-bottom) + 10px);
+      position: fixed; left: 8px; right: 8px;
+      bottom: calc(var(--safe-bottom) + 8px);
       z-index: 30;
       display: grid; grid-template-columns: repeat(6, 1fr);
-      background: rgba(10,22,32,.94);
+      background: rgba(10,22,32,.98);
       border: 1px solid var(--line);
-      border-radius: 22px;
-      backdrop-filter: blur(16px);
-      padding: .35rem;
-      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+      border-radius: 18px;
+      padding: .3rem;
     }
     nav.tabs button {
-      border: 0; background: transparent; border-radius: 16px; padding: .65rem .15rem;
-      font-size: .62rem; color: var(--muted); display: grid; gap: .15rem; place-items: center;
+      border: 0; background: transparent; border-radius: 14px; padding: .55rem .1rem;
+      font-size: .6rem; color: var(--muted); display: grid; gap: .1rem; place-items: center;
       font-weight: 600;
     }
-    nav.tabs button .ico { font-size: 1rem; line-height: 1; }
-    nav.tabs button.active { color: var(--accent2); background: rgba(76,201,240,.08); }
+    nav.tabs button .ico { font-size: .95rem; line-height: 1; }
+    nav.tabs button.active { color: var(--accent2); background: rgba(76,201,240,.1); }
     #loginGate {
-      position: fixed; inset: 0; background: rgba(3,8,12,.94); z-index: 50;
+      position: fixed; inset: 0; background: rgba(3,8,12,.96); z-index: 50;
       display: grid; place-items: center; padding: 1rem;
     }
     #loginGate .box { width: min(420px, 100%); }
@@ -161,11 +141,12 @@
     #tradeSheet.open { display: flex; }
     #tradeSheet .sheet {
       width: min(520px, 100%); max-height: min(85vh, 640px); overflow: auto;
-      background: #102030; border: 1px solid var(--line); border-radius: 22px; padding: 1rem;
+      background: #102030; border: 1px solid var(--line); border-radius: 18px; padding: 1rem;
     }
-    .kv { display: grid; grid-template-columns: 120px 1fr; gap: .35rem .6rem; font-size: .9rem; margin: .7rem 0; }
+    .kv { display: grid; grid-template-columns: 110px 1fr; gap: .3rem .55rem; font-size: .88rem; margin: .6rem 0; }
     .kv .k { color: var(--muted); }
     .hidden { display: none !important; }
+    #lastDecision { max-height: 7.5rem; overflow: auto; }
   </style>
 </head>
 <body>
@@ -393,6 +374,10 @@
 let TOKEN = localStorage.getItem('astra_token') || '';
 let TRADE_FILTER = 'all';
 let TRADES_CACHE = {};
+let ACTIVE_TAB = 'home';
+let REFRESH_BUSY = false;
+let SYMBOLS_LOADED = false;
+let LAST_DECISION = '';
 const $ = (id) => document.getElementById(id);
 
 async function api(path, opts={}) {
@@ -434,18 +419,18 @@ function showAuthTab(name){
   $('tabPass').classList.toggle('active', name==='pass');
   $('tabOtp').classList.toggle('active', name==='otp');
 }
-async function loginPassword(){
+
+async function passwordLogin(){
   try{
     const r = await api('/api/auth/login-password', {method:'POST', body: JSON.stringify({email:$('passEmail').value, password:$('passSecret').value})});
     TOKEN = r.token; localStorage.setItem('astra_token', TOKEN);
     hideLogin(); refreshAll();
-  }catch(e){ $('loginErr').textContent = 'Невірна пошта або пароль'; }
+  }catch(e){ $('loginErr').textContent = 'Невірний email або пароль'; }
 }
-
 async function bindEmail(){
   try{
     await api('/api/auth/bind-email', {method:'POST', body: JSON.stringify({email:$('bindEmail').value, password:$('bindPass').value})});
-    $('loginErr').textContent = 'Пошту прив’язано. Тепер надішли код.';
+    $('loginErr').textContent = 'Пошту прив’язано. Увійди паролем.';
     await initAuth();
     $('otpEmail').value = $('bindEmail').value;
   }catch(e){ $('loginErr').textContent = 'Помилка: '+e.message; }
@@ -472,15 +457,18 @@ async function legacyLogin(){
 }
 
 function tab(name){
+  ACTIVE_TAB = name;
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.remove('active'));
   $('panel-'+name).classList.add('active');
-  document.querySelector(`nav.tabs button[data-tab="${name}"]`).classList.add('active');
+  const btn = document.querySelector(`nav.tabs button[data-tab="${name}"]`);
+  if (btn) btn.classList.add('active');
   if(name==='charts'){ loadCandles(); loadEquity(); }
   if(name==='history'){ loadHistory(); }
   if(name==='news'){ loadNews(); }
   if(name==='chat'){ loadChat(); }
   if(name==='settings'){ loadSettings(); }
+  if(name==='home'){ refreshStatus({deep:true}).catch(()=>{}); }
 }
 
 function money(n){ const v=Number(n||0); return (v>0?'+':'') + '$' + v.toFixed(4); }
@@ -488,53 +476,84 @@ function fmtTime(iso){
   if(!iso) return '—';
   try{ const d=new Date(iso); return d.toISOString().replace('T',' ').slice(0,19)+' UTC'; }catch(e){ return String(iso).slice(0,19); }
 }
-
-async function refreshStatus(){
-  const s = await api('/api/status');
-  $('mEquity').textContent = '$' + Number(s.equity||0).toFixed(2);
-  const pnl = Number(s.pnl_today||0);
-  $('mPnl').textContent = money(pnl);
-  $('mPnl').className = 'value ' + (pnl>=0?'pnl-plus':'pnl-minus');
-  const b = s.buckets||{};
-  $('mFx').textContent = '$' + Number(b.fx_bucket_usd||0).toFixed(2);
-  $('mCry').textContent = '$' + Number(b.crypto_hold_usd||0).toFixed(2);
-  const split = s.pnl_split || {};
-  const setMoney = (id, v, forceClass) => {
-    const n = Number(v||0);
-    $(id).textContent = money(n);
-    if (forceClass) $(id).className = 'value ' + forceClass;
-    else $(id).className = 'value ' + (n>=0?'pnl-plus':'pnl-minus');
-  };
-  setMoney('fxProfit', split.fx_profit_total ?? split.daily_fx_profit, 'pnl-plus');
-  $('fxLoss').textContent = '-$' + Number(split.fx_loss_total||0).toFixed(4);
-  $('fxLoss').className = 'value pnl-minus';
-  setMoney('cryProfit', split.crypto_profit_total ?? split.daily_crypto_profit, 'pnl-plus');
-  $('cryLoss').textContent = '-$' + Number(split.crypto_loss_total||0).toFixed(4);
-  $('cryLoss').className = 'value pnl-minus';
-  setMoney('fxNetDay', split.daily_fx_pnl);
-  setMoney('cryNetDay', split.daily_crypto_pnl);
-  setMoney('fxNetAll', split.fx_net_total);
-  setMoney('cryNetAll', split.crypto_net_total);
-  $('modePill').textContent = `${s.mode||'—'} · ${s.exchange_id||''}`;
-  $('modePill').className = 'pill ' + (s.trading_enabled ? 'on':'off');
-  $('lastDecision').textContent = s.last_decision_summary || '—';
-  $('breakerLine').textContent = s.circuit_breaker_active ? ('Breaker: '+(s.circuit_breaker_reason||'')) : 'Breaker: ok';
-  const p = await api('/api/positions');
-  $('posTable').innerHTML = (p.positions||[]).map(x=>`<div class="mono">${x.symbol} ${x.side} · uPnL ${money(x.unrealized_pnl)} · ${Number(x.size).toFixed(6)} @ ${x.mark_price}</div>`).join('') || 'Немає';
-  const slots = p.fx_slots || [];
-  $('fxSlots').innerHTML = slots.map(sl=>`<div class="slot-item">
+function setTxt(id, text){
+  const el = $(id); if(!el) return;
+  if (el.textContent !== text) el.textContent = text;
+}
+function setMoney(id, v, forceClass){
+  const el = $(id); if(!el) return;
+  const n = Number(v||0);
+  const text = money(n);
+  const cls = 'value ' + (forceClass || (n>=0?'pnl-plus':'pnl-minus'));
+  if (el.textContent !== text) el.textContent = text;
+  if (el.className !== cls) el.className = cls;
+}
+function renderSlots(slots){
+  const html = (slots||[]).map(sl=>`<div class="slot-item">
     <div>
       <div><b>${sl.symbol}</b> · entry ${sl.entry}</div>
-      <div class="muted mono">${sl.id} · ${fmtTime(sl.opened_at)} · ${sl.ai_reason||''}</div>
+      <div class="muted mono">${sl.id} · ${fmtTime(sl.opened_at)}</div>
     </div>
     <button class="danger" onclick="closeSlot('${sl.id}')">Закрити</button>
   </div>`).join('') || 'Немає відкритих FX слотів';
-  if($('symSelect').options.length===0){
-    const syms = await api('/api/symbols');
-    const all=[...(syms.fx_pairs||[]), ...(syms.symbols||[])];
-    [...new Set(all)].forEach(sy=>{
-      const o=document.createElement('option'); o.value=sy; o.textContent=sy; $('symSelect').appendChild(o);
-    });
+  if ($('fxSlots').innerHTML !== html) $('fxSlots').innerHTML = html;
+}
+
+async function refreshStatus(opts={}){
+  if (REFRESH_BUSY) return;
+  REFRESH_BUSY = true;
+  try{
+    const deep = !!opts.deep;
+    const s = await api('/api/status?light=1');
+    setTxt('mEquity', '$' + Number(s.equity||0).toFixed(2));
+    setMoney('mPnl', s.pnl_today);
+    const b = s.buckets||{};
+    setTxt('mFx', '$' + Number(b.fx_bucket_usd||0).toFixed(2));
+    setTxt('mCry', '$' + Number(b.crypto_hold_usd||0).toFixed(2));
+    const split = s.pnl_split || {};
+    setMoney('fxProfit', split.fx_profit_total, 'pnl-plus');
+    setTxt('fxLoss', '-$' + Number(split.fx_loss_total||0).toFixed(4));
+    $('fxLoss').className = 'value pnl-minus';
+    setMoney('cryProfit', split.crypto_profit_total, 'pnl-plus');
+    setTxt('cryLoss', '-$' + Number(split.crypto_loss_total||0).toFixed(4));
+    $('cryLoss').className = 'value pnl-minus';
+    setMoney('fxNetDay', split.daily_fx_pnl);
+    setMoney('cryNetDay', split.daily_crypto_pnl);
+    setMoney('fxNetAll', split.fx_net_total);
+    setMoney('cryNetAll', split.crypto_net_total);
+    setTxt('modePill', `${s.mode||'—'} · ${s.exchange_id||''}`);
+    $('modePill').className = 'pill ' + (s.trading_enabled ? 'on':'off');
+    const decision = s.last_decision_summary || '—';
+    if (decision !== LAST_DECISION) {
+      LAST_DECISION = decision;
+      setTxt('lastDecision', decision);
+    }
+    setTxt('breakerLine', s.circuit_breaker_active ? ('Breaker: '+(s.circuit_breaker_reason||'')) : 'Breaker: ok');
+    renderSlots(s.fx_slots || b.open_slots || []);
+
+    if (deep && ACTIVE_TAB === 'home') {
+      try {
+        const p = await api('/api/positions');
+        const posHtml = (p.positions||[]).map(x=>`<div class="mono">${x.symbol} ${x.side} · uPnL ${money(x.unrealized_pnl)} · ${Number(x.size).toFixed(6)}</div>`).join('') || 'Немає';
+        if ($('posTable').innerHTML !== posHtml) $('posTable').innerHTML = posHtml;
+        if (p.fx_slots) renderSlots(p.fx_slots);
+      } catch(_e) {}
+    }
+    if (!SYMBOLS_LOADED) {
+      try {
+        const syms = await api('/api/symbols');
+        const all=[...(syms.fx_pairs||[]), ...(syms.symbols||[])];
+        const sel = $('symSelect');
+        if (sel && sel.options.length===0) {
+          [...new Set(all)].forEach(sy=>{
+            const o=document.createElement('option'); o.value=sy; o.textContent=sy; sel.appendChild(o);
+          });
+        }
+        SYMBOLS_LOADED = true;
+      } catch(_e) {}
+    }
+  } finally {
+    REFRESH_BUSY = false;
   }
 }
 async function closeSlot(id){
@@ -542,17 +561,17 @@ async function closeSlot(id){
   try{
     const r = await api('/api/fx/close-slot', {method:'POST', body: JSON.stringify({slot_id:id})});
     $('ctrlMsg').textContent = 'Закрито · PnL '+money(r.pnl);
-    refreshStatus();
+    refreshStatus({deep:true});
   }catch(e){ $('ctrlMsg').textContent = e.message; }
 }
 async function ctrl(action){
-  try{ const r=await api('/api/control/'+action,{method:'POST'}); $('ctrlMsg').textContent=r.message||'ok'; refreshStatus(); }
+  try{ const r=await api('/api/control/'+action,{method:'POST'}); $('ctrlMsg').textContent=r.message||'ok'; refreshStatus({deep:true}); }
   catch(e){ $('ctrlMsg').textContent=e.message; }
 }
 
 function setTradeFilter(f){ TRADE_FILTER=f; document.querySelectorAll('#tradeFilters .chip').forEach(c=>c.classList.toggle('active', c.dataset.f===f)); loadHistory(); }
 async function loadHistory(){
-  const t = await api(`/api/trades?result=${encodeURIComponent(TRADE_FILTER)}&limit=400`);
+  const t = await api(`/api/trades?result=${encodeURIComponent(TRADE_FILTER)}&limit=120`);
   const st=t.stats||{};
   $('stWins').textContent = `${st.wins||0} · ${money(st.gross_profit||0)}`;
   $('stLosses').textContent = `${st.losses||0} · ${money(st.gross_loss||0)}`;
@@ -579,8 +598,8 @@ async function openTrade(id){
 function closeTradeSheet(){ $('tradeSheet').classList.remove('open'); }
 
 async function loadNews(force){
-  $('newsList').innerHTML = 'Завантаження світових новин…';
-  const r = await api('/api/news?limit=24' + (force ? '&refresh=1' : ''));
+  $('newsList').innerHTML = 'Завантаження…';
+  const r = await api('/api/news?limit=16' + (force ? '&refresh=1' : ''));
   const badge = (a, label) => {
     const color = a==='buy_watch' ? '#3dffa8' : a==='sell_risk' ? '#ff6b7a' : a==='hold' ? '#7ec8ff' : '#9aa4b2';
     return `<span style="display:inline-block;margin-top:.35rem;padding:.15rem .45rem;border-radius:8px;font-size:.72rem;font-weight:700;background:rgba(255,255,255,.06);color:${color}">${label||'Спостерігати'}</span>`;
@@ -588,7 +607,7 @@ async function loadNews(force){
   $('newsList').innerHTML = (r.news||[]).map(n=>`<a class="news-item" href="${n.url||'#'}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">
     <div>
       <div><b>${n.title||''}</b></div>
-      <div class="muted">${n.source||''} · ${n.published||''}</div>
+      <div class="muted">${n.source||''}</div>
       <div style="margin-top:.25rem">${n.summary||''}</div>
       ${badge(n.action, n.action_uk)}
     </div>
@@ -619,7 +638,7 @@ async function sendPhoto(){
 
 async function loadCandles(){
   const symbol=$('symSelect').value; if(!symbol) return;
-  const data=await api(`/api/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${$('tfSelect').value}&limit=80`);
+  const data=await api(`/api/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${$('tfSelect').value}&limit=60`);
   drawCandles($('chart'), data.candles||[]);
 }
 async function loadEquity(){
@@ -666,12 +685,17 @@ async function saveSettings(){
   }catch(e){ $('setMsg').textContent=e.message; }
 }
 
-async function refreshAll(){ try{ await refreshStatus(); hideLogin(); } catch(e){ if(String(e.message).includes('auth')) showLogin(); } }
+async function refreshAll(){ try{ await refreshStatus({deep:true}); hideLogin(); } catch(e){ if(String(e.message).includes('auth')) showLogin(); } }
 
 (async function boot(){
   await initAuth();
   if(TOKEN){ hideLogin(); refreshAll(); } else { showLogin(); }
-  setInterval(()=>{ if(TOKEN) refreshStatus().catch(()=>{}); }, 10000);
+  // Light poll (no Kraken): every 12s. Deep positions: every 35s only on home tab.
+  setInterval(()=>{ if(TOKEN) refreshStatus({deep:false}).catch(()=>{}); }, 12000);
+  setInterval(()=>{ if(TOKEN && ACTIVE_TAB==='home') refreshStatus({deep:true}).catch(()=>{}); }, 35000);
+  document.addEventListener('visibilitychange', ()=>{
+    if (!document.hidden && TOKEN) refreshStatus({deep: ACTIVE_TAB==='home'}).catch(()=>{});
+  });
 })();
 </script>
 </body>

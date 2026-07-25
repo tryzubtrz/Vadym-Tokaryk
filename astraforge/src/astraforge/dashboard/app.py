@@ -285,8 +285,13 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
         return resp
 
     @app.get("/api/status")
-    async def api_status(_: None = Depends(require_auth)) -> JSONResponse:
-        st = await eng().get_status_model()
+    async def api_status(
+        light: int = 1,
+        _: None = Depends(require_auth),
+    ) -> JSONResponse:
+        # light=1 (default): no live Kraken call — uses cached equity from engine ticks
+        live = not bool(int(light or 0))
+        st = await eng().get_status_model(live=live)
         snap = eng().breaker.snapshot()
         buckets = eng().buckets.snapshot()
         return JSONResponse(
@@ -299,6 +304,8 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
                 "is_spot": eng().settings.is_spot,
                 "buckets": buckets,
                 "pnl_split": eng().buckets.pnl_breakdown(),
+                "fx_slots": buckets.get("open_slots") or [],
+                "light": not live,
                 "fx_ai": getattr(eng(), "_last_fx_tick", {}).get("ai")
                 or getattr(eng().fx, "last_ai", {}),
             }
