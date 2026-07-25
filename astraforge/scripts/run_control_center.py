@@ -33,7 +33,8 @@ os.environ.setdefault("ZERO_FEE_MODE", "true")
 os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.04")
 os.environ.setdefault("FX_BUCKET_USD", "26.5")
 os.environ.setdefault("CRYPTO_BUCKET_USD", "0")
-os.environ.setdefault("MAX_DRAWDOWN_PCT", "7")
+# Force 7% — .env may still say 6.0 from pre-FX-only days
+os.environ["MAX_DRAWDOWN_PCT"] = os.getenv("MAX_DRAWDOWN_PCT") if False else "7"
 os.environ.setdefault("DASHBOARD_PASSWORD", "astraforge")
 os.environ.setdefault("DASHBOARD_PORT", "8080")
 os.environ["DATABASE_PATH"] = str((ROOT / "data" / "astraforge_live.db").resolve())
