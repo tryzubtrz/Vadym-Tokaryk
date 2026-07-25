@@ -45,12 +45,14 @@ def _default_state() -> dict[str, Any]:
         "stake_usdc": 1.0,
         "max_loss_usdc": 5.0,
         "max_losses": 5,  # hard stop after 5 losing $1 tickets
-        "min_tp_pct": 0.40,  # > measured RT ~0.16%
-        "stop_pct": 0.55,
-        "max_hold_sec": 3_600,  # 1h
-        "cooldown_sec": 600,
-        "min_score": 0.48,
-        "base_min_score": 0.48,
+        "min_tp_pct": 0.28,  # RT~0.16% + thin buffer (faster exits)
+        "early_tp_pct": 0.20,  # after early_after_sec, take green above fees
+        "early_after_sec": 900,  # 15m
+        "stop_pct": 0.45,
+        "max_hold_sec": 2_700,  # 45m
+        "cooldown_sec": 180,
+        "min_score": 0.42,
+        "base_min_score": 0.42,
         "learn_score_step": 0.03,
         "leverage": 1,
         "open": None,
@@ -88,10 +90,13 @@ def load_state() -> dict[str, Any]:
     base["stake_usdc"] = min(max(float(base.get("stake_usdc") or 1.0), 0.5), 1.0)
     base["max_loss_usdc"] = min(float(base.get("max_loss_usdc") or 5.0), 5.0)
     base["max_losses"] = int(min(max(int(base.get("max_losses") or 5), 1), 5))
-    base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.40), 0.30)
-    base["base_min_score"] = min(max(float(base.get("base_min_score") or 0.48), 0.35), 0.70)
+    base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.28), 0.22)
+    base["early_tp_pct"] = max(float(base.get("early_tp_pct") or 0.20), 0.18)
+    base["early_after_sec"] = min(max(float(base.get("early_after_sec") or 900), 300), 3600)
+    base["base_min_score"] = min(max(float(base.get("base_min_score") or 0.42), 0.35), 0.70)
     base["min_score"] = min(max(float(base.get("min_score") or base["base_min_score"]), 0.35), 0.70)
-    base["cooldown_sec"] = min(max(float(base.get("cooldown_sec") or 600), 300), 3600)
+    base["cooldown_sec"] = min(max(float(base.get("cooldown_sec") or 180), 60), 3600)
+    base["max_hold_sec"] = min(max(float(base.get("max_hold_sec") or 2700), 600), 7200)
     if not isinstance(base.get("trade_log"), list):
         base["trade_log"] = []
     if not isinstance(base.get("lessons"), list):
@@ -499,20 +504,24 @@ class MexcMicroAI:
         entry = float(open_pos["entry"])
         px = m["bid"]
         pnl_pct = (px - entry) / entry * 100.0
-        min_tp = float(self.state.get("min_tp_pct") or 0.40)
-        stop_pct = float(self.state.get("stop_pct") or 0.55)
+        min_tp = float(self.state.get("min_tp_pct") or 0.28)
+        early_tp = float(self.state.get("early_tp_pct") or 0.20)
+        early_after = float(self.state.get("early_after_sec") or 900)
+        stop_pct = float(self.state.get("stop_pct") or 0.45)
         age = 0.0
         try:
             opened = datetime.fromisoformat(str(open_pos.get("opened_at") or "").replace("Z", "+00:00"))
             age = (datetime.now(timezone.utc) - opened).total_seconds()
         except Exception:
             age = 0.0
-        max_hold = float(self.state.get("max_hold_sec") or 3600)
+        max_hold = float(self.state.get("max_hold_sec") or 2700)
 
         action = None
         reason = ""
         if pnl_pct >= min_tp:
             action, reason = "tp", f"+{pnl_pct:.3f}%>= {min_tp:.2f}%"
+        elif age >= early_after and pnl_pct >= early_tp:
+            action, reason = "early", f"+{pnl_pct:.3f}%>= {early_tp:.2f}% after {age/60:.0f}m"
         elif pnl_pct <= -stop_pct:
             action, reason = "sl", f"{pnl_pct:.3f}%<= -{stop_pct:.2f}%"
         elif age >= max_hold:

@@ -6,30 +6,22 @@
   "max_loss_usdc": 5.0,
   "max_losses": 5,
   "min_tp_pct": 0.4,
+  "early_tp_pct": 0.2,
+  "early_after_sec": 900.0,
   "stop_pct": 0.55,
-  "max_hold_sec": 3600,
+  "max_hold_sec": 3600.0,
   "cooldown_sec": 600.0,
   "min_score": 0.48,
   "base_min_score": 0.48,
   "learn_score_step": 0.03,
   "leverage": 1,
-  "open": {
-    "id": "3cdd6c27",
-    "side": "long",
-    "contracts": 1.0,
-    "entry": 1.0879,
-    "notional": 1.0879,
-    "opened_at": "2026-07-25T10:24:51.435755+00:00",
-    "order_id": "835944461414103168",
-    "mode": "live",
-    "score": 0.567
-  },
+  "open": null,
   "last_open_at": "2026-07-25T10:24:51.435762+00:00",
-  "last_close_at": "",
-  "realized_pnl_usdc": 0.0,
-  "wins": 0,
+  "last_close_at": "2026-07-25T14:07:19.470767+00:00",
+  "realized_pnl_usdc": 0.0015999999999998238,
+  "wins": 1,
   "losses": 0,
-  "trades": 0,
+  "trades": 1,
   "stopped": false,
   "stop_reason": "",
   "measured_taker_pct": 0.08,
@@ -53,8 +45,10 @@
       "mom1": 0.0
     }
   },
-  "trade_log": [],
+  "trade_log": [
+    "2026-07-25T14:07:19.470751+00:00 time entry=1.0879 pnl=+0.0016 score=0.567 losses=0/5 min_score=0.48 sleeve=5.00"
+  ],
   "lessons": [],
   "night_started_at": "2026-07-25T10:23:49.809485+00:00",
-  "updated_at": "2026-07-25T10:37:38.048770+00:00"
+  "updated_at": "2026-07-25T14:14:29.631395+00:00"
 }
