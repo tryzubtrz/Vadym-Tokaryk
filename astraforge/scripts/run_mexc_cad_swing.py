@@ -96,18 +96,90 @@ class MexcCadSwing:
                 "apiKey": key,
                 "secret": secret,
                 "enableRateLimit": True,
-                "options": {"defaultType": "swap"},
+                "options": {
+                    "defaultType": "swap",
+                    "recvWindow": 60_000,
+                    "fetchCurrencies": False,
+                    "adjustForTimeDifference": True,
+                },
             }
         )
         self.state = load_state()
+        self.account_taker = 0.0004
+        self.account_maker = 0.0001
+
+    async def _sync_clock(self) -> None:
+        try:
+            await self.ex.load_time_difference()
+            td = self.ex.options.get("timeDifference")
+            print(f"clock sync timeDifference={td}ms", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"clock sync soft-fail: {exc}", flush=True)
+
+    async def _log_account_fees(self) -> None:
+        """Print account fee for CAD_USDT before any order (first-run check)."""
+        try:
+            raw = await self.ex.contractPrivateGetAccountContractFeeRate({"symbol": "CAD_USDT"})
+            rows = raw.get("data") or []
+            row = rows[0] if rows else {}
+            self.account_taker = float(row.get("takerFeeRate") or self.account_taker)
+            self.account_maker = float(row.get("makerFeeRate") or self.account_maker)
+            zero = bool(row.get("isZeroFeeRate") or row.get("isZeroFeeSymbol"))
+            rt = self.account_taker * 2.0 * 100.0
+            print(
+                f"FEE CHECK CAD_USDT | maker={self.account_maker*100:.3f}% "
+                f"taker={self.account_taker*100:.3f}% RT≈{rt:.3f}% "
+                f"zero_fee={zero} mode={row.get('feeRateMode')}",
+                flush=True,
+            )
+            min_tp = float(self.state.get("min_tp_pct") or 0.25)
+            if min_tp < rt + 0.05:
+                print(
+                    f"WARN: min_tp_pct={min_tp}% is tight vs RT≈{rt:.3f}% — "
+                    f"raising floor mentally; prefer >= {rt + 0.15:.2f}%",
+                    flush=True,
+                )
+        except Exception as exc:  # noqa: BLE001
+            print(f"FEE CHECK soft-fail (using defaults 0.01/0.04%): {exc}", flush=True)
+
+    async def _fee_from_order(self, order_id: str | None) -> str:
+        if not order_id:
+            return "fee=n/a"
+        try:
+            raw = await self.ex.contractPrivateGetOrderFeeDetails({"orderId": order_id})
+            data = raw.get("data") or raw
+            return f"fee_details={data}"
+        except Exception:
+            try:
+                trades = await self.ex.fetch_my_trades(SYMBOL, limit=5)
+                hit = [t for t in trades if str(t.get("order") or "") == str(order_id)]
+                if not hit and trades:
+                    hit = trades[:1]
+                parts = []
+                for t in hit[:3]:
+                    fee = t.get("fee") or {}
+                    parts.append(
+                        f"tradeFee={fee.get('cost')} {fee.get('currency')} "
+                        f"price={t.get('price')} amt={t.get('amount')}"
+                    )
+                return " | ".join(parts) if parts else "fee=n/a"
+            except Exception as exc:  # noqa: BLE001
+                return f"fee_lookup_fail={exc}"
 
     async def setup(self) -> None:
+        await self._sync_clock()
         await self.ex.load_markets()
-        # Force 1x — never higher for this trial
-        try:
-            await self.ex.set_leverage(1, SYMBOL)
-        except Exception as exc:  # noqa: BLE001
-            print(f"set_leverage soft-fail: {exc}", flush=True)
+        await self._log_account_fees()
+        # Force 1x — never higher for this trial (MEXC wants openType/positionType)
+        for position_type in (1, 2):  # 1=long, 2=short
+            try:
+                await self.ex.set_leverage(
+                    1,
+                    SYMBOL,
+                    params={"openType": 2, "positionType": position_type},  # 2=cross
+                )
+            except Exception as exc:  # noqa: BLE001
+                print(f"set_leverage soft-fail posType={position_type}: {exc}", flush=True)
         try:
             await self.ex.set_margin_mode("cross", SYMBOL)
         except Exception:
@@ -207,12 +279,16 @@ class MexcCadSwing:
         order = await self.ex.create_order(SYMBOL, "market", close_side, amount, params={"reduceOnly": True})
         fill = float(order.get("average") or order.get("price") or px)
         realized = (fill - entry) * amount if side == "long" else (entry - fill) * amount
+        fee_txt = await self._fee_from_order(str(order.get("id") or ""))
         # contracts are CAD; PnL approx in USDT already for linear
         self.state["realized_pnl_usdt"] = float(self.state.get("realized_pnl_usdt") or 0) + realized
         self.state["open"] = None
         self.state["last_close_at"] = _utcnow()
         save_state(self.state)
-        return f"CLOSE {action} pnl≈{realized:+.4f} USDT ({reason}) order={order.get('id')}"
+        return (
+            f"CLOSE {action} pnl≈{realized:+.4f} USDT ({reason}) "
+            f"order={order.get('id')} {fee_txt}"
+        )
 
     async def maybe_open(self) -> str:
         if self.state.get("open"):
@@ -261,24 +337,34 @@ class MexcCadSwing:
 
         # ensure leverage 1 each open
         try:
-            await self.ex.set_leverage(1, SYMBOL)
+            await self.ex.set_leverage(
+                1, SYMBOL, params={"openType": 2, "positionType": 1}
+            )
         except Exception:
             pass
         order = await self.ex.create_order(SYMBOL, "market", "buy", contracts)
         fill = float(order.get("average") or order.get("price") or px)
+        filled_amt = float(order.get("amount") or contracts)
+        fee_txt = await self._fee_from_order(str(order.get("id") or ""))
+        # first-live sanity: estimated taker fee vs fill notional
+        est_fee = filled_amt * fill * self.account_taker
         self.state["open"] = {
             "id": str(uuid.uuid4())[:8],
             "side": "long",
-            "contracts": float(order.get("amount") or contracts),
+            "contracts": filled_amt,
             "entry": fill,
-            "notional_usdt": float(order.get("amount") or contracts) * fill,
+            "notional_usdt": filled_amt * fill,
             "opened_at": _utcnow(),
             "order_id": order.get("id"),
             "mode": "live",
+            "est_open_fee_usdt": est_fee,
         }
         self.state["last_open_at"] = _utcnow()
         save_state(self.state)
-        return f"OPEN long {contracts} CAD @ {fill} (~{notional:.2f} USDT) id={order.get('id')}"
+        return (
+            f"OPEN long {filled_amt} CAD @ {fill} (~{filled_amt * fill:.2f} USDT) "
+            f"id={order.get('id')} est_fee≈{est_fee:.4f} USDT {fee_txt}"
+        )
 
     async def tick(self) -> str:
         free = await self.free_usdt()
