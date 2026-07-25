@@ -304,7 +304,8 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request) -> Any:
-        return templates.TemplateResponse("control.html", {"request": request})
+        html_path = TEMPLATES_DIR / "control.html"
+        return HTMLResponse(html_path.read_text(encoding="utf-8"))
 
     return app
 
