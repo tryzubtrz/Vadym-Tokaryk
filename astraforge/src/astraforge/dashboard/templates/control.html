@@ -181,19 +181,32 @@
         <label class="label muted">Прив’яжи свою пошту (один раз)</label>
         <input id="bindEmail" type="email" placeholder="you@email.com" />
         <div style="height:.5rem"></div>
-        <input id="bindPass" type="password" placeholder="Тимчасовий пароль (astraforge)" />
+        <input id="bindPass" type="password" placeholder="Тимчасовий пароль" />
         <div style="height:.6rem"></div>
         <button class="primary" style="width:100%" onclick="bindEmail()">Прив’язати пошту</button>
       </div>
 
-      <div id="stepOtp">
+      <div id="authTabs" class="chips hidden" style="margin-top:.2rem">
+        <button class="chip active" id="tabPass" onclick="showAuthTab('pass')">Пароль</button>
+        <button class="chip" id="tabOtp" onclick="showAuthTab('otp')">Код на пошту</button>
+      </div>
+
+      <div id="stepPass" class="hidden">
+        <input id="passEmail" type="email" placeholder="Твоя пошта" />
+        <div style="height:.5rem"></div>
+        <input id="passSecret" type="password" placeholder="Особистий пароль" />
+        <div style="height:.6rem"></div>
+        <button class="primary" style="width:100%" onclick="loginPassword()">Увійти</button>
+      </div>
+
+      <div id="stepOtp" class="hidden">
         <input id="otpEmail" type="email" placeholder="Твоя пошта" />
         <div style="height:.5rem"></div>
         <button class="primary" style="width:100%" onclick="requestOtp()">Надіслати код</button>
         <div style="height:.7rem"></div>
         <input id="otpCode" inputmode="numeric" placeholder="Код з листа" />
         <div style="height:.5rem"></div>
-        <button class="ok" style="width:100%" onclick="verifyOtp()">Увійти</button>
+        <button class="ok" style="width:100%" onclick="verifyOtp()">Увійти по коду</button>
       </div>
 
       <div id="stepLegacy" class="hidden">
@@ -384,14 +397,33 @@ async function initAuth(){
   const s = await fetch('/api/auth/status').then(r=>r.json());
   $('stepBind').classList.add('hidden');
   $('stepOtp').classList.add('hidden');
+  $('stepPass').classList.add('hidden');
   $('stepLegacy').classList.add('hidden');
+  $('authTabs').classList.add('hidden');
   if(!s.owner_bound){
     $('authHint').textContent = 'Спочатку прив’яжи свою пошту — лише вона зможе відкрити бота';
     $('stepBind').classList.remove('hidden');
   } else {
-    $('authHint').textContent = 'Вхід по коду на пошту власника ' + (s.owner_hint||'');
-    $('stepOtp').classList.remove('hidden');
+    $('authHint').textContent = 'Вхід тільки для ' + (s.owner_hint||'власника');
+    $('authTabs').classList.remove('hidden');
+    $('passEmail').value = $('passEmail').value || '';
+    $('otpEmail').value = $('otpEmail').value || '';
+    if(s.password_login){ showAuthTab('pass'); }
+    else { showAuthTab('otp'); }
   }
+}
+function showAuthTab(name){
+  $('stepPass').classList.toggle('hidden', name!=='pass');
+  $('stepOtp').classList.toggle('hidden', name!=='otp');
+  $('tabPass').classList.toggle('active', name==='pass');
+  $('tabOtp').classList.toggle('active', name==='otp');
+}
+async function loginPassword(){
+  try{
+    const r = await api('/api/auth/login-password', {method:'POST', body: JSON.stringify({email:$('passEmail').value, password:$('passSecret').value})});
+    TOKEN = r.token; localStorage.setItem('astra_token', TOKEN);
+    hideLogin(); refreshAll();
+  }catch(e){ $('loginErr').textContent = 'Невірна пошта або пароль'; }
 }
 
 async function bindEmail(){

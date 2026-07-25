@@ -17,10 +17,13 @@ from pydantic import BaseModel, EmailStr, Field
 from astraforge.dashboard.email_auth import (
     generate_code,
     hash_code,
+    hash_owner_password,
     make_session_token,
     owner_email,
+    owner_password_configured,
     send_otp_email,
     valid_session_token,
+    verify_owner_password,
 )
 from astraforge.core.fx_scalper import fetch_crypto_news
 
@@ -44,6 +47,11 @@ class OtpRequestBody(BaseModel):
 class OtpVerifyBody(BaseModel):
     email: EmailStr
     code: str = Field(min_length=4, max_length=12)
+
+
+class OwnerPassBody(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=4, max_length=128)
 
 
 class BindEmailBody(BaseModel):
@@ -162,8 +170,29 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
                 "owner_bound": bool(owner),
                 "owner_hint": (owner[:2] + "***@" + owner.split("@")[-1]) if owner and "@" in owner else "",
                 "mode": "email_otp" if owner else "bind_email",
+                "password_login": bool(owner) and owner_password_configured(),
             }
         )
+
+    @app.post("/api/auth/login-password")
+    async def login_owner_password(body: OwnerPassBody) -> JSONResponse:
+        """Second login path: owner email + personal password only."""
+        owner = owner_email()
+        email = str(body.email).lower().strip()
+        if not owner or email != owner:
+            raise HTTPException(status_code=401, detail="invalid_credentials")
+        if not owner_password_configured() or not verify_owner_password(body.password):
+            raise HTTPException(status_code=401, detail="invalid_credentials")
+        token = make_session_token(owner)
+        resp = JSONResponse({"ok": True, "token": token, "email": owner, "mode": "password"})
+        resp.set_cookie(
+            "astra_token",
+            token,
+            httponly=False,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 30,
+        )
+        return resp
 
     @app.post("/api/auth/bind-email")
     async def bind_email(body: BindEmailBody) -> JSONResponse:

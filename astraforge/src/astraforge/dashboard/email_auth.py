@@ -20,6 +20,22 @@ def _token_secret() -> str:
     return os.getenv("DASHBOARD_TOKEN_SECRET", (os.getenv("DASHBOARD_PASSWORD") or "astraforge") + "-secret")
 
 
+def hash_owner_password(password: str) -> str:
+    raw = f"owner-pass:{password}:{_token_secret()}"
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+def owner_password_configured() -> bool:
+    return bool((os.getenv("DASHBOARD_OWNER_PASSWORD_HASH") or "").strip())
+
+
+def verify_owner_password(password: str) -> bool:
+    expected = (os.getenv("DASHBOARD_OWNER_PASSWORD_HASH") or "").strip()
+    if not expected or not password:
+        return False
+    return hmac.compare_digest(expected, hash_owner_password(password))
+
+
 def make_session_token(email: str) -> str:
     raw = f"otp-session:{email.lower()}:{_token_secret()}"
     return hashlib.sha256(raw.encode()).hexdigest()
