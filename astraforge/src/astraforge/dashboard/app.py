@@ -591,10 +591,14 @@ async def _ai_advisor(engine: Any, message: str) -> str:
         }
         system = (
             "Ти торговий AI AstraForge (FX multi-scalp + crypto). "
-            "Відповідай мовою користувача. Коротко і по суті. "
+            "Відповідай українською, коротко і по суті звичайним текстом (не JSON). "
             "Пояснюй чи варто купувати зараз чи чекати нижче."
         )
-        raw = await engine.agent._call_llm(system, __import__("json").dumps(context, ensure_ascii=False))
+        raw = await engine.agent._call_llm(
+            system,
+            __import__("json").dumps(context, ensure_ascii=False),
+            json_mode=False,
+        )
         return raw.strip()
     except Exception as exc:  # noqa: BLE001
         return f"Не вдалося отримати відповідь AI: {exc}"
@@ -634,7 +638,8 @@ async def _ai_vision(engine: Any, message: str, b64: str, mime: str) -> str:
     }
     async with httpx.AsyncClient(timeout=90.0) as client:
         resp = await client.post(url, headers=headers, json=body)
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            return f"Не вдалося проаналізувати фото: LLM {resp.status_code}: {resp.text[:300]}"
         data = resp.json()
     return str(data["choices"][0]["message"]["content"]).strip()
 

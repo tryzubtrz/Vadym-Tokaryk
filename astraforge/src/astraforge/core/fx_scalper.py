@@ -324,11 +324,18 @@ class FxMultiScalper:
 
 
 async def fetch_crypto_news(limit: int = 25) -> list[dict[str, Any]]:
-    """Aggregate public crypto RSS/Atom headlines (no API key)."""
+    """Aggregate Ukrainian crypto/FX headlines (public RSS, no API key)."""
     feeds = [
-        "https://www.coindesk.com/arc/outboundfeeds/rss/",
-        "https://cointelegraph.com/rss",
-        "https://decrypt.co/feed",
+        # Google News UA — crypto / bitcoin / forex / USD CAD
+        (
+            "https://news.google.com/rss/search?"
+            "q=%D0%BA%D1%80%D0%B8%D0%BF%D1%82%D0%BE%D0%B2%D0%B0%D0%BB%D1%8E%D1%82%D0%B0"
+            "+OR+%D0%B1%D1%96%D1%82%D0%BA%D0%BE%D1%97%D0%BD"
+            "+OR+%D1%84%D0%BE%D1%80%D0%B5%D0%BA%D1%81"
+            "+OR+USD%2FCAD&hl=uk&gl=UA&ceid=UA:uk"
+        ),
+        "https://www.epravda.com.ua/rss/news.xml",
+        "https://ain.ua/feed/",
     ]
     items: list[dict[str, Any]] = []
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
@@ -342,7 +349,8 @@ async def fetch_crypto_news(limit: int = 25) -> list[dict[str, Any]]:
                 continue
             # minimal RSS item parse
             parts = text.split("<item>")
-            for part in parts[1:8]:
+            per_feed = 14 if "news.google.com" in url else 8
+            for part in parts[1 : per_feed + 1]:
                 def _tag(name: str) -> str:
                     a = part.find(f"<{name}>")
                     b = part.find(f"</{name}>")
@@ -362,12 +370,24 @@ async def fetch_crypto_news(limit: int = 25) -> list[dict[str, Any]]:
                         .replace("&amp;", "&")
                         .replace("&lt;", "<")
                         .replace("&gt;", ">")
+                        .replace("&quot;", '"')
                     )
 
                 title = _tag("title")
                 link = _tag("link")
                 pub = _tag("pubDate") or _tag("published")
                 desc = _tag("description")[:280]
+                # strip HTML leftovers from summaries
+                while "<" in desc and ">" in desc:
+                    a = desc.find("<")
+                    b = desc.find(">", a)
+                    if b < 0:
+                        break
+                    desc = (desc[:a] + " " + desc[b + 1 :]).strip()
+                source = "Google Новини" if "news.google.com" in url else url.split("/")[2]
+                # Google titles often end with " - Джерело"
+                if " - " in title and "news.google.com" in url:
+                    source = title.rsplit(" - ", 1)[-1].strip() or source
                 if title:
                     items.append(
                         {
@@ -375,10 +395,11 @@ async def fetch_crypto_news(limit: int = 25) -> list[dict[str, Any]]:
                             "url": link,
                             "published": pub,
                             "summary": desc,
-                            "source": url.split("/")[2],
+                            "source": source,
+                            "lang": "uk",
                         }
                     )
-    # dedupe by title
+    # prefer Google UA order first, then others; dedupe by title
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for it in items:

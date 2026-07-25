@@ -266,36 +266,39 @@ class AIAgent:
             ),
         }
 
-    async def _call_llm(self, system: str, user: str) -> str:
+    async def _call_llm(self, system: str, user: str, *, json_mode: bool = True) -> str:
         provider = self.settings.llm_provider
         if provider == "anthropic":
             return await self._call_anthropic(system, user)
         # openai / ollama / xai — OpenAI-compatible chat completions
-        return await self._call_openai_compatible(system, user)
+        return await self._call_openai_compatible(system, user, json_mode=json_mode)
 
-    async def _call_openai_compatible(self, system: str, user: str) -> str:
+    async def _call_openai_compatible(
+        self, system: str, user: str, *, json_mode: bool = True
+    ) -> str:
         base = self.settings.effective_llm_base_url or "https://api.openai.com/v1"
         url = f"{base.rstrip('/')}/chat/completions"
         headers = {"Content-Type": "application/json"}
         if self.settings.llm_api_key:
             headers["Authorization"] = f"Bearer {self.settings.llm_api_key}"
 
-        body = {
+        body: dict[str, Any] = {
             "model": self.settings.llm_model,
             "temperature": 0.2,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "response_format": {"type": "json_object"},
         }
-        # Some local models don't support response_format
-        if self.settings.llm_provider == "ollama":
-            body.pop("response_format", None)
+        # json_object requires the word "json" in messages — only for structured agent output
+        if json_mode and self.settings.llm_provider != "ollama":
+            body["response_format"] = {"type": "json_object"}
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(url, headers=headers, json=body)
-            resp.raise_for_status()
+            if resp.status_code >= 400:
+                detail = resp.text[:400]
+                raise RuntimeError(f"LLM {resp.status_code}: {detail}")
             data = resp.json()
         content = data["choices"][0]["message"]["content"]
         return str(content)
