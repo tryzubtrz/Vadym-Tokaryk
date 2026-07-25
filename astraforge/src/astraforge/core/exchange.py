@@ -98,6 +98,7 @@ class ExchangeClient:
         class_map = {
             "binance": ccxt.binanceusdm,
             "bybit": ccxt.bybit,
+            "kraken": ccxt.krakenfutures,
         }
         cls = class_map.get(exchange_id)
         if cls is None:
@@ -109,6 +110,9 @@ class ExchangeClient:
             "enableRateLimit": True,
             "options": {"defaultType": "swap"},
         }
+        # Kraken Futures uses USD-margined linear perps by default
+        if exchange_id == "kraken":
+            params["options"] = {"defaultType": "future"}
 
         self._exchange = cls(params)
 
@@ -269,9 +273,20 @@ class ExchangeClient:
         total = 0.0
         free = 0.0
         if bal:
-            usdt = bal.get("USDT") or {}
-            total = float(usdt.get("total") or bal.get("total", {}).get("USDT") or 0)
-            free = float(usdt.get("free") or bal.get("free", {}).get("USDT") or 0)
+            # Binance/Bybit → USDT; Kraken Futures → USD (fallback to USDT)
+            quote = bal.get("USD") or bal.get("USDT") or {}
+            total = float(
+                quote.get("total")
+                or bal.get("total", {}).get("USD")
+                or bal.get("total", {}).get("USDT")
+                or 0
+            )
+            free = float(
+                quote.get("free")
+                or bal.get("free", {}).get("USD")
+                or bal.get("free", {}).get("USDT")
+                or 0
+            )
 
         if total <= 0 and self.is_paper:
             total = self._paper_equity + unrealized

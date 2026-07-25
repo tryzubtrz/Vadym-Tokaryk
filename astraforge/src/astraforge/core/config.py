@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     telegram_allowed_user_ids: str = ""
 
     # Exchange
-    exchange_id: Literal["binance", "bybit"] = "binance"
+    exchange_id: Literal["binance", "bybit", "kraken"] = "binance"
     exchange_api_key: str = ""
     exchange_api_secret: str = ""
 
@@ -115,7 +115,10 @@ class Settings(BaseSettings):
 
     @property
     def symbols(self) -> list[str]:
-        return [s.strip() for s in self.trade_symbols.split(",") if s.strip()]
+        raw = [s.strip() for s in self.trade_symbols.split(",") if s.strip()]
+        if self.exchange_id == "kraken":
+            return [normalize_symbol_for_exchange(s, "kraken") for s in raw]
+        return raw
 
     @property
     def is_paper(self) -> bool:
@@ -130,6 +133,30 @@ class Settings(BaseSettings):
         if self.llm_provider == "xai":
             return "https://api.x.ai/v1"
         return None
+
+
+def normalize_symbol_for_exchange(symbol: str, exchange_id: str) -> str:
+    """Map common USDT-perp symbols onto exchange-native symbols."""
+    if exchange_id != "kraken":
+        return symbol
+    mapping = {
+        "BTC/USDT:USDT": "BTC/USD:USD",
+        "ETH/USDT:USDT": "ETH/USD:USD",
+        "SOL/USDT:USDT": "SOL/USD:USD",
+        "BNB/USDT:USDT": "BNB/USD:USD",
+        "XRP/USDT:USDT": "XRP/USD:USD",
+        "BTC/USDT": "BTC/USD:USD",
+        "ETH/USDT": "ETH/USD:USD",
+    }
+    if symbol in mapping:
+        return mapping[symbol]
+    # Already Kraken-style
+    if symbol.endswith(":USD") or "/USD" in symbol:
+        return symbol
+    # Generic USDT swap → USD linear on Kraken Futures
+    if ":USDT" in symbol:
+        return symbol.replace("USDT", "USD")
+    return symbol
 
 
 def load_yaml_config(path: str | Path | None = None) -> dict[str, Any]:

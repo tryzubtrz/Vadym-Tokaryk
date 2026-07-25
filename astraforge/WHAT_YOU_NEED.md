@@ -13,20 +13,34 @@
 
 ## 1) Ключ біржі (обов’язково)
 
-**Навіщо:** підключення до futures (Binance або Bybit).
+**Навіщо:** підключення до futures (Binance, Bybit або **Kraken**).
 
-**Де взяти (спочатку TESTNET):**
+### Kraken Futures (якщо гроші вже там)
+1. Відкрий: https://futures.kraken.com/  
+   або Kraken Pro → Futures → Settings → **API**
+2. Create API key
+3. Права: **Read + Trade / Futures**, без **Withdraw**
+4. Скопіюй API Key + Secret
+
+```env
+EXCHANGE_ID=kraken
+EXCHANGE_API_KEY=...
+EXCHANGE_API_SECRET=...
+TRADING_MODE=paper
+LIVE_CONFIRMED=false
+```
+
+На Kraken ф’ючерси в **USD** (не USDT). Бот сам мапить пари на `BTC/USD:USD` тощо.
+
+### Binance / Bybit Testnet (для безпечного тесту)
 - Binance Futures Testnet: https://testnet.binancefuture.com/  
-  → API Management → Create API
 - Bybit Testnet: https://testnet.bybit.com/  
-  → API → Create New Key
 
 **Права ключа:**
 - ✅ Read
 - ✅ Futures / Derivatives Trading
 - ❌ Withdrawal / Transfer — **ВИМКНУТИ**
 
-Потім у `.env`:
 ```env
 EXCHANGE_ID=binance
 EXCHANGE_API_KEY=...

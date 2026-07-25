@@ -64,13 +64,21 @@ HARD_MAX_LEVERAGE = 5.0
 HARD_MAX_POSITION_PCT = 4.0
 HARD_MAX_OPEN_POSITIONS = 3
 AGENT_INTERVAL_SEC = 60
-SYMBOLS = [
+SYMBOLS_DEFAULT = [
     "BTC/USDT:USDT",
     "ETH/USDT:USDT",
     "SOL/USDT:USDT",
     "BNB/USDT:USDT",
     "XRP/USDT:USDT",
 ]
+KRAKEN_SYMBOLS = [
+    "BTC/USD:USD",
+    "ETH/USD:USD",
+    "SOL/USD:USD",
+    "BNB/USD:USD",
+    "XRP/USD:USD",
+]
+SYMBOLS = list(SYMBOLS_DEFAULT)
 DB_PATH = Path(__file__).resolve().parent / "data" / "astraforge_one.db"
 PAPER_START_EQUITY = 10_000.0
 
@@ -182,12 +190,18 @@ def load_config_interactive() -> Config:
     print("Paper mode by default. Live needs LIVE_CONFIRMED=true.\n")
 
     if not cfg.api_key:
-        cfg.exchange_id = ask("Exchange (binance/bybit)", cfg.exchange_id).lower()
+        cfg.exchange_id = ask("Exchange (binance/bybit/kraken)", cfg.exchange_id).lower()
         cfg.api_key = ask("Exchange API KEY (Read + Futures only, NO withdraw)")
         cfg.api_secret = ask("Exchange API SECRET", secret=True)
     if not cfg.api_key or not cfg.api_secret:
         print("ERROR: Exchange API key + secret are required.")
         raise SystemExit(1)
+
+    # Kraken Futures uses USD-margined symbols
+    global SYMBOLS
+    if cfg.exchange_id in {"kraken", "krakenfutures"}:
+        cfg.exchange_id = "kraken"
+        SYMBOLS = list(KRAKEN_SYMBOLS)
 
     if not cfg.telegram_token:
         tg = ask("Telegram bot token (Enter to skip — use console chat)")
@@ -402,15 +416,22 @@ class Exchange:
         self.realized_today = 0.0
 
     async def connect(self) -> None:
-        cls = {"binance": ccxt.binanceusdm, "bybit": ccxt.bybit}.get(self.cfg.exchange_id)
+        cls = {
+            "binance": ccxt.binanceusdm,
+            "bybit": ccxt.bybit,
+            "kraken": ccxt.krakenfutures,
+        }.get(self.cfg.exchange_id)
         if not cls:
             raise SystemExit(f"Unsupported exchange: {self.cfg.exchange_id}")
+        options: dict[str, Any] = {"defaultType": "swap"}
+        if self.cfg.exchange_id == "kraken":
+            options = {"defaultType": "future"}
         self.ex = cls(
             {
                 "apiKey": self.cfg.api_key,
                 "secret": self.cfg.api_secret,
                 "enableRateLimit": True,
-                "options": {"defaultType": "swap"},
+                "options": options,
             }
         )
         if self.cfg.mode == "paper":
