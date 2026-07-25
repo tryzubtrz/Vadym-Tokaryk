@@ -99,6 +99,8 @@ class ExchangeClient:
         self._paper_realized_today = 0.0
         # Spot cost basis: symbol -> {"entry": avg_price, "size": qty}
         self._spot_cost_basis: dict[str, dict[str, float]] = {}
+        self._private_lock = asyncio.Lock()
+        self._last_private_ts = 0.0
 
     @property
     def mode(self) -> TradingMode:
@@ -217,22 +219,32 @@ class ExchangeClient:
         asks = [[mid + i * 5, 1.0 + i * 0.1] for i in range(1, 11)]
         return summarize_order_book({"bids": bids, "asks": asks})
 
+    async def _private_gate(self) -> None:
+        """Serialize Kraken private calls to reduce Invalid nonce races."""
+        async with self._private_lock:
+            now = asyncio.get_event_loop().time()
+            wait = 0.55 - (now - self._last_private_ts)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_private_ts = asyncio.get_event_loop().time()
+
     async def fetch_balance_raw(self) -> dict[str, Any]:
         if not self._exchange:
             return {}
         last_exc: Exception | None = None
         for attempt in range(5):
             try:
-                await asyncio.sleep(0.6 * attempt)
+                await self._private_gate()
+                await asyncio.sleep(0.25 * attempt)
                 return await self._exchange.fetch_balance()
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
                 err = str(exc).lower()
                 if "nonce" in err and attempt < 4:
                     logger.warning("balance_nonce_retry", attempt=attempt + 1)
+                    await asyncio.sleep(0.8 * (attempt + 1))
                     continue
                 logger.error("fetch_balance_failed", error=str(exc))
-                # Nonce / transient auth noise must NOT halt trading forever
                 if "nonce" in err:
                     return {}
                 await self.breaker.trip(BreakerReason.API_ERROR, detail=str(exc))
@@ -545,6 +557,7 @@ class ExchangeClient:
                 raise ValueError(
                     f"Order amount {amount} below exchange minimum {min_amt} for {symbol}"
                 )
+            await self._private_gate()
             order = await self._exchange.create_order(
                 symbol,
                 "market",
@@ -568,17 +581,27 @@ class ExchangeClient:
             if "minimum" in err or "invalid arguments" in err or "volume" in err:
                 raise
             if "nonce" in err:
-                # Transient Kraken clock/nonce issue — retry once, don't trip breaker
-                await asyncio.sleep(0.5)
-                try:
-                    order = await self._exchange.create_order(
-                        symbol, "market", side, amount, None, order_params
-                    )
-                    logger.info("order_placed_after_nonce_retry", symbol=symbol, id=order.get("id"))
-                    return order
-                except Exception as exc2:  # noqa: BLE001
-                    logger.error("order_failed", error=str(exc2), symbol=symbol, side=side)
-                    raise
+                last: Exception = exc
+                for retry in range(3):
+                    await asyncio.sleep(0.7 * (retry + 1))
+                    try:
+                        await self._private_gate()
+                        order = await self._exchange.create_order(
+                            symbol, "market", side, amount, None, order_params
+                        )
+                        logger.info(
+                            "order_placed_after_nonce_retry",
+                            symbol=symbol,
+                            id=order.get("id"),
+                            retry=retry + 1,
+                        )
+                        return order
+                    except Exception as exc2:  # noqa: BLE001
+                        last = exc2
+                        if "nonce" not in str(exc2).lower():
+                            break
+                logger.error("order_failed", error=str(last), symbol=symbol, side=side)
+                raise last
             if "margin" in err or "insufficient" in err:
                 await self.breaker.trip(BreakerReason.MARGIN_CALL, detail=str(exc))
             else:
