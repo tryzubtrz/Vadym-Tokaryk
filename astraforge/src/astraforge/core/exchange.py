@@ -187,7 +187,8 @@ class ExchangeClient:
             return await self._exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         except Exception as exc:  # noqa: BLE001
             logger.warning("fetch_ohlcv_failed", symbol=symbol, error=str(exc))
-            await self.breaker.trip(BreakerReason.API_ERROR, detail=f"OHLCV {symbol}: {exc}")
+            if "rate limit" not in str(exc).lower():
+                await self.breaker.trip(BreakerReason.API_ERROR, detail=f"OHLCV {symbol}: {exc}")
             return []
 
     async def fetch_ticker(self, symbol: str) -> dict[str, Any]:
@@ -197,7 +198,8 @@ class ExchangeClient:
             return await self._exchange.fetch_ticker(symbol)
         except Exception as exc:  # noqa: BLE001
             logger.warning("fetch_ticker_failed", symbol=symbol, error=str(exc))
-            await self.breaker.trip(BreakerReason.API_ERROR, detail=f"ticker {symbol}: {exc}")
+            if "rate limit" not in str(exc).lower():
+                await self.breaker.trip(BreakerReason.API_ERROR, detail=f"ticker {symbol}: {exc}")
             return {"symbol": symbol, "last": 0.0}
 
     async def fetch_order_book(self, symbol: str, limit: int = 20) -> dict[str, Any]:
@@ -749,6 +751,9 @@ class ExchangeClient:
                     logger.warning("spot_insufficient_funds_soft", error=str(exc), symbol=symbol)
                 else:
                     await self.breaker.trip(BreakerReason.MARGIN_CALL, detail=str(exc))
+            elif "rate limit" in err:
+                logger.warning("order_rate_limited_soft", error=str(exc), symbol=symbol)
+                await asyncio.sleep(2.0)
             else:
                 await self.breaker.trip(BreakerReason.API_ERROR, detail=str(exc))
             raise

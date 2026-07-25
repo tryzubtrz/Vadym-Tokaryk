@@ -236,14 +236,36 @@ class TradingEngine:
                     f"(цель ${goal.target_profit_usd:.2f}). Фиксирую / защищаю прибыль."
                 )
 
+        # Always manage open FX slots (take profit / emergency) even if new entries paused.
+        # Rate-limit / soft API trips must not strand an open scalp.
+        fx_style = getattr(self.settings, "trading_style", "") == "fx_multi_scalp"
+        if fx_style and self.buckets.open_slot_count() > 0:
+            try:
+                closed_only = await self.fx.manage_open_slots()
+                closed_ok = [c for c in (closed_only or []) if c.get("ok")]
+                if closed_ok:
+                    parts = [
+                        f"FX close {c.get('symbol')} pnl={float(c.get('pnl') or 0):+.4f}"
+                        for c in closed_ok
+                    ]
+                    self._last_status_summary = " | ".join(parts)
+                    logger.info("fx_manage_while_paused", summary=self._last_status_summary)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("fx_manage_while_paused_failed", error=str(exc))
+
         if not trading_enabled or not risk_ok.allowed or not self.breaker.trading_allowed:
-            self._last_status_summary = (
-                f"paused: {risk_ok.reason or self.breaker.reason or 'trading disabled'}"
-            )
-            return
+            reason = risk_ok.reason or self.breaker.reason or "trading disabled"
+            br = (self.breaker.reason or "")
+            # Auto-clear transient Kraken rate-limit trips
+            if "rate limit" in br.lower():
+                await self.breaker.reset(force_daily=False)
+                logger.info("rate_limit_breaker_auto_reset")
+            if not trading_enabled or not risk_ok.allowed or not self.breaker.trading_allowed:
+                self._last_status_summary = f"paused: {reason}"
+                return
 
         # FX multi-scalp path (priority strategy)
-        if getattr(self.settings, "trading_style", "") == "fx_multi_scalp":
+        if fx_style:
             # $20 FX + rest crypto (auto, based on live equity)
             split = self.buckets.sync_to_equity(account.equity, fx_target=20.0)
             fx_result = await self.fx.tick(available_usd=float(account.available_balance))
