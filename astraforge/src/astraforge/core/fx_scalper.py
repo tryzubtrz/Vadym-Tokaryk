@@ -323,21 +323,43 @@ class FxMultiScalper:
         }
 
 
-async def fetch_crypto_news(limit: int = 25) -> list[dict[str, Any]]:
-    """Aggregate Ukrainian crypto/FX headlines (public RSS, no API key)."""
+_NEWS_CACHE: dict[str, Any] = {"at": 0.0, "items": []}
+_NEWS_CACHE_TTL_SEC = 12 * 60
+
+
+def clear_news_cache() -> None:
+    _NEWS_CACHE["at"] = 0.0
+    _NEWS_CACHE["items"] = []
+
+
+def _strip_html(text: str) -> str:
+    out = text or ""
+    while "<" in out and ">" in out:
+        a = out.find("<")
+        b = out.find(">", a)
+        if b < 0:
+            break
+        out = (out[:a] + " " + out[b + 1 :]).strip()
+    return " ".join(out.split())
+
+
+async def fetch_crypto_news(limit: int = 25, agent: Any | None = None) -> list[dict[str, Any]]:
+    """Global crypto headlines → Ukrainian actionable briefs (buy/sell/watch)."""
+    import time as _time
+
+    now = _time.time()
+    cached = _NEWS_CACHE.get("items") or []
+    if cached and now - float(_NEWS_CACHE.get("at") or 0) < _NEWS_CACHE_TTL_SEC:
+        return cached[:limit]
+
     feeds = [
-        # Google News UA — crypto / bitcoin / forex / USD CAD
-        (
-            "https://news.google.com/rss/search?"
-            "q=%D0%BA%D1%80%D0%B8%D0%BF%D1%82%D0%BE%D0%B2%D0%B0%D0%BB%D1%8E%D1%82%D0%B0"
-            "+OR+%D0%B1%D1%96%D1%82%D0%BA%D0%BE%D1%97%D0%BD"
-            "+OR+%D1%84%D0%BE%D1%80%D0%B5%D0%BA%D1%81"
-            "+OR+USD%2FCAD&hl=uk&gl=UA&ceid=UA:uk"
-        ),
-        "https://www.epravda.com.ua/rss/news.xml",
-        "https://ain.ua/feed/",
+        "https://www.coindesk.com/arc/outboundfeeds/rss",
+        "https://cointelegraph.com/rss",
+        "https://decrypt.co/feed",
+        "https://www.theblock.co/rss.xml",
+        "https://cryptonews.com/news/feed/",
     ]
-    items: list[dict[str, Any]] = []
+    raw_items: list[dict[str, Any]] = []
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
         for url in feeds:
             try:
@@ -347,16 +369,12 @@ async def fetch_crypto_news(limit: int = 25) -> list[dict[str, Any]]:
             except Exception as exc:  # noqa: BLE001
                 logger.debug("news_feed_failed", url=url, error=str(exc))
                 continue
-            # minimal RSS item parse
             parts = text.split("<item>")
-            per_feed = 14 if "news.google.com" in url else 8
-            for part in parts[1 : per_feed + 1]:
+            for part in parts[1:10]:
                 def _tag(name: str) -> str:
                     a = part.find(f"<{name}>")
-                    b = part.find(f"</{name}>")
-                    if a < 0 or b < 0:
-                        # CDATA / atom style
-                        a = part.find(f"<{name}")
+                    if a < 0:
+                        a = part.find(f"<{name} ")
                         if a < 0:
                             return ""
                     start = part.find(">", a) + 1
@@ -376,38 +394,140 @@ async def fetch_crypto_news(limit: int = 25) -> list[dict[str, Any]]:
                 title = _tag("title")
                 link = _tag("link")
                 pub = _tag("pubDate") or _tag("published")
-                desc = _tag("description")[:280]
-                # strip HTML leftovers from summaries
-                while "<" in desc and ">" in desc:
-                    a = desc.find("<")
-                    b = desc.find(">", a)
-                    if b < 0:
-                        break
-                    desc = (desc[:a] + " " + desc[b + 1 :]).strip()
-                source = "Google Новини" if "news.google.com" in url else url.split("/")[2]
-                # Google titles often end with " - Джерело"
-                if " - " in title and "news.google.com" in url:
-                    source = title.rsplit(" - ", 1)[-1].strip() or source
+                desc = _strip_html(_tag("description"))[:320]
+                source = url.split("/")[2].replace("www.", "")
                 if title:
-                    items.append(
+                    raw_items.append(
                         {
-                            "title": title,
+                            "title_en": title,
                             "url": link,
                             "published": pub,
-                            "summary": desc,
+                            "summary_en": desc,
                             "source": source,
-                            "lang": "uk",
                         }
                     )
-    # prefer Google UA order first, then others; dedupe by title
+
     seen: set[str] = set()
-    out: list[dict[str, Any]] = []
-    for it in items:
-        key = it["title"].lower()
+    deduped: list[dict[str, Any]] = []
+    for it in raw_items:
+        key = it["title_en"].lower()
         if key in seen:
             continue
         seen.add(key)
-        out.append(it)
+        deduped.append(it)
+        if len(deduped) >= max(limit * 2, 36):
+            break
+
+    localized = await _localize_global_news(deduped[:36], agent=agent, limit=limit)
+    _NEWS_CACHE["at"] = now
+    _NEWS_CACHE["items"] = localized
+    return localized[:limit]
+
+
+async def _localize_global_news(
+    items: list[dict[str, Any]],
+    *,
+    agent: Any | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Translate + prioritize world crypto news into Ukrainian trader briefs."""
+    if not items:
+        return []
+
+    # Fallback without LLM: keep English (better than empty)
+    fallback = [
+        {
+            "title": it["title_en"],
+            "url": it.get("url", ""),
+            "published": it.get("published", ""),
+            "summary": it.get("summary_en", ""),
+            "source": it.get("source", ""),
+            "action": "watch",
+            "action_uk": "Спостерігати",
+            "lang": "en",
+        }
+        for it in items[:limit]
+    ]
+    if agent is None or not getattr(getattr(agent, "settings", None), "llm_api_key", None):
+        return fallback
+
+    payload = [
+        {
+            "i": idx,
+            "title": it["title_en"],
+            "summary": (it.get("summary_en") or "")[:220],
+            "source": it.get("source", ""),
+            "url": it.get("url", ""),
+            "published": it.get("published", ""),
+        }
+        for idx, it in enumerate(items)
+    ]
+    system = (
+        "Ти крипто-редактор для трейдера. Отримай світові новини англійською. "
+        "Поверни JSON: {\"news\":[...]} — лише наймасштабніші/корисні для торгівлі. "
+        "Пріоритет: лістинги/запуски нових токенів, дешеві точки входу, великі ризики dump, "
+        "хаки/банкрутства, регуляція, ETF, кити, макро що рухає ринок. "
+        "Ігноруй дрібні локальні/українські новини без ринкового впливу. "
+        f"Максимум {limit} пунктів. Кожен пункт: "
+        '{"i":number,"title_uk":"...","summary_uk":"1-2 речення українською",'
+        '"action":"buy_watch|sell_risk|hold|watch","why_uk":"коротко чому"}. '
+        "title_uk і summary_uk ТІЛЬКИ українською. Без вигаданих фактів."
+    )
+    try:
+        raw = await agent._call_llm(system, json.dumps({"items": payload}, ensure_ascii=False))
+        text = raw.strip()
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.startswith("json"):
+                text = text[4:].strip()
+        data = json.loads(text)
+        rows = data.get("news") if isinstance(data, dict) else data
+        if not isinstance(rows, list):
+            return fallback
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("news_localize_failed", error=str(exc))
+        return fallback
+
+    action_uk = {
+        "buy_watch": "Можна дивитись на купівлю",
+        "sell_risk": "Ризик — краще продати / зменшити",
+        "hold": "Тримати / не панікувати",
+        "watch": "Спостерігати",
+    }
+    by_i = {idx: it for idx, it in enumerate(items)}
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            idx = int(row.get("i"))
+        except Exception:  # noqa: BLE001
+            continue
+        src = by_i.get(idx)
+        if not src:
+            continue
+        act = str(row.get("action") or "watch").lower().strip()
+        if act not in action_uk:
+            act = "watch"
+        title_uk = str(row.get("title_uk") or "").strip()
+        summary_uk = str(row.get("summary_uk") or "").strip()
+        why = str(row.get("why_uk") or "").strip()
+        if why and why not in summary_uk:
+            summary_uk = f"{summary_uk} {why}".strip()
+        if not title_uk:
+            continue
+        out.append(
+            {
+                "title": title_uk,
+                "url": src.get("url", ""),
+                "published": src.get("published", ""),
+                "summary": summary_uk,
+                "source": src.get("source", ""),
+                "action": act,
+                "action_uk": action_uk[act],
+                "lang": "uk",
+            }
+        )
         if len(out) >= limit:
             break
-    return out
+    return out or fallback

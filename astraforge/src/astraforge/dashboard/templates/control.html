@@ -304,9 +304,9 @@
 
     <div id="panel-news" class="panel">
       <section>
-        <h2>Новини українською</h2>
-        <p class="muted" style="margin:.2rem 0 .6rem">Крипта, форекс і ринки — стрічка UA</p>
-        <button onclick="loadNews()">Оновити стрічку</button>
+        <h2>Світові крипто-новини</h2>
+        <p class="muted" style="margin:.2rem 0 .6rem">Масштабні події світу — українською: що дивитись на купівлю / що ризиково продати</p>
+        <button onclick="loadNews(true)">Оновити стрічку</button>
         <div style="height:.6rem"></div>
         <div class="brick scroll" id="newsList" style="max-height:70vh">Завантаження…</div>
       </section>
@@ -546,10 +546,20 @@ async function openTrade(id){
 }
 function closeTradeSheet(){ $('tradeSheet').classList.remove('open'); }
 
-async function loadNews(){
-  const r = await api('/api/news?limit=30');
+async function loadNews(force){
+  $('newsList').innerHTML = 'Завантаження світових новин…';
+  const r = await api('/api/news?limit=24' + (force ? '&refresh=1' : ''));
+  const badge = (a, label) => {
+    const color = a==='buy_watch' ? '#3dffa8' : a==='sell_risk' ? '#ff6b7a' : a==='hold' ? '#7ec8ff' : '#9aa4b2';
+    return `<span style="display:inline-block;margin-top:.35rem;padding:.15rem .45rem;border-radius:8px;font-size:.72rem;font-weight:700;background:rgba(255,255,255,.06);color:${color}">${label||'Спостерігати'}</span>`;
+  };
   $('newsList').innerHTML = (r.news||[]).map(n=>`<a class="news-item" href="${n.url||'#'}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">
-    <div><div><b>${n.title}</b></div><div class="muted">${n.source||''} · ${n.published||''}</div><div class="muted">${n.summary||''}</div></div>
+    <div>
+      <div><b>${n.title||''}</b></div>
+      <div class="muted">${n.source||''} · ${n.published||''}</div>
+      <div style="margin-top:.25rem">${n.summary||''}</div>
+      ${badge(n.action, n.action_uk)}
+    </div>
   </a>`).join('') || 'Немає новин';
 }
 

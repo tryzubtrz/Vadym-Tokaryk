@@ -25,7 +25,7 @@ from astraforge.dashboard.email_auth import (
     valid_session_token,
     verify_owner_password,
 )
-from astraforge.core.fx_scalper import fetch_crypto_news
+from astraforge.core.fx_scalper import clear_news_cache, fetch_crypto_news
 
 if TYPE_CHECKING:
     from astraforge.core.engine import TradingEngine
@@ -413,9 +413,19 @@ def create_app(engine: TradingEngine | None = None) -> FastAPI:
         return JSONResponse({"symbols": eng().settings.symbols, "fx_pairs": fx})
 
     @app.get("/api/news")
-    async def api_news(limit: int = 30, _: None = Depends(require_auth)) -> JSONResponse:
-        items = await fetch_crypto_news(limit=max(5, min(int(limit), 50)))
-        return JSONResponse({"news": items, "updated_at": time.time()})
+    async def api_news(
+        limit: int = 30,
+        refresh: int = 0,
+        _: None = Depends(require_auth),
+    ) -> JSONResponse:
+        e = eng()
+        if int(refresh or 0):
+            clear_news_cache()
+        items = await fetch_crypto_news(
+            limit=max(5, min(int(limit), 40)),
+            agent=getattr(e, "agent", None),
+        )
+        return JSONResponse({"news": items, "updated_at": time.time(), "lang": "uk"})
 
     @app.post("/api/control/{action}")
     async def api_control(action: str, _: None = Depends(require_auth)) -> JSONResponse:
