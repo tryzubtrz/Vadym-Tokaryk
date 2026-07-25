@@ -221,14 +221,14 @@ class ExchangeClient:
         if not self._exchange:
             return {}
         last_exc: Exception | None = None
-        for attempt in range(3):
+        for attempt in range(5):
             try:
-                await asyncio.sleep(0.35 * attempt)
+                await asyncio.sleep(0.6 * attempt)
                 return await self._exchange.fetch_balance()
             except Exception as exc:  # noqa: BLE001
                 last_exc = exc
                 err = str(exc).lower()
-                if "nonce" in err and attempt < 2:
+                if "nonce" in err and attempt < 4:
                     logger.warning("balance_nonce_retry", attempt=attempt + 1)
                     continue
                 logger.error("fetch_balance_failed", error=str(exc))
@@ -355,14 +355,38 @@ class ExchangeClient:
                 or free
             )
             if self.settings.is_spot:
-                # Cash + crypto mark-to-market
+                # Cash + crypto mark-to-market (CAD converted via USD/CAD)
                 eq = 0.0
                 totals = bal.get("total") or {}
+                cad_usd = 0.0
+                try:
+                    t = await self.fetch_ticker("USD/CAD")
+                    px = float(t.get("last") or 0)
+                    if px > 0:
+                        cad_usd = 1.0 / px
+                except Exception:  # noqa: BLE001
+                    cad_usd = 0.0
                 for asset, amt in totals.items():
                     a = float(amt or 0)
                     if a <= 0:
                         continue
-                    if asset in {"USD", "USDT", "USDC", "EUR", "ZUSD", "GBP", "CAD"}:
+                    if asset in {"USD", "USDT", "USDC", "ZUSD"}:
+                        eq += a
+                        continue
+                    if asset == "CAD":
+                        eq += a * cad_usd if cad_usd > 0 else a * 0.7
+                        continue
+                    if asset in {"EUR", "GBP"}:
+                        # rough mark via /USD pair when available
+                        sym = f"{asset}/USD"
+                        if self._exchange and sym in (self._exchange.markets or {}):
+                            try:
+                                t = await self.fetch_ticker(sym)
+                                px = float(t.get("last") or 0)
+                                eq += a * px
+                                continue
+                            except Exception:  # noqa: BLE001
+                                pass
                         eq += a
                         continue
                     sym = f"{asset}/USD"
@@ -375,6 +399,11 @@ class ExchangeClient:
                             pass
                 if eq > 0:
                     total = eq
+
+        # If private balance failed (nonce), keep last known peak as soft equity floor
+        if total <= 0 and peak_equity > 0:
+            total = peak_equity
+            free = max(free, 0.0)
 
         peak = max(peak_equity, total)
         dd = ((peak - total) / peak * 100.0) if peak > 0 else 0.0

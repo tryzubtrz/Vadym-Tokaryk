@@ -1,4 +1,4 @@
-"""Unified AstraForge Control Center: LIVE engine + web cockpit."""
+"""Unified AstraForge Control Center: LIVE FX multi-scalp + web cockpit."""
 from __future__ import annotations
 
 import asyncio
@@ -22,14 +22,17 @@ os.environ.setdefault("TRADING_MODE", "live")
 os.environ.setdefault("LIVE_CONFIRMED", "true")
 os.environ.setdefault(
     "TRADE_SYMBOLS",
-    "BTC/USD,ETH/USD,SOL/USD,XRP/USD,ADA/USD,DOGE/USD,LINK/USD,LTC/USD,AVAX/USD,DOT/USD",
+    "USD/CAD,EUR/CAD,EUR/USD,GBP/USD,AUD/USD,SOL/USD,XRP/USD,DOGE/USD",
 )
-os.environ.setdefault("TRADING_STYLE", "momentum_scalp")
+os.environ.setdefault("TRADING_STYLE", "fx_multi_scalp")
 os.environ.setdefault("CANDLE_TIMEFRAME", "5m")
-os.environ.setdefault("AGENT_LOOP_INTERVAL_SEC", "30")
+os.environ.setdefault("AGENT_LOOP_INTERVAL_SEC", "45")
 os.environ.setdefault("MAX_POSITION_PCT", "30")
+os.environ.setdefault("MAX_OPEN_POSITIONS", "10")
 os.environ.setdefault("ZERO_FEE_MODE", "true")
 os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.12")
+os.environ.setdefault("FX_BUCKET_USD", "20")
+os.environ.setdefault("CRYPTO_BUCKET_USD", "8")
 os.environ.setdefault("DASHBOARD_PASSWORD", "astraforge")
 os.environ.setdefault("DASHBOARD_PORT", "8080")
 os.environ["DATABASE_PATH"] = str((ROOT / "data" / "astraforge_live.db").resolve())
@@ -59,14 +62,17 @@ async def main() -> None:
         llm_model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
         llm_api_key=os.environ["LLM_API_KEY"],
         trade_symbols=os.environ.get("TRADE_SYMBOLS", ""),
-        trading_style=os.getenv("TRADING_STYLE", "momentum_scalp"),  # type: ignore[arg-type]
+        trading_style=os.getenv("TRADING_STYLE", "fx_multi_scalp"),  # type: ignore[arg-type]
         candle_timeframe=os.getenv("CANDLE_TIMEFRAME", "5m"),
-        agent_loop_interval_sec=int(os.getenv("AGENT_LOOP_INTERVAL_SEC", "30")),
+        agent_loop_interval_sec=int(os.getenv("AGENT_LOOP_INTERVAL_SEC", "45")),
         max_position_pct=float(os.getenv("MAX_POSITION_PCT", "30")),
-        max_open_positions=int(os.getenv("MAX_OPEN_POSITIONS", "2")),
+        max_open_positions=int(os.getenv("MAX_OPEN_POSITIONS", "10")),
         max_leverage=1.0,
         zero_fee_mode=os.getenv("ZERO_FEE_MODE", "true").lower() in {"1", "true", "yes"},
         min_take_profit_pct=float(os.getenv("MIN_TAKE_PROFIT_PCT", "0.12")),
+        fx_bucket_usd=float(os.getenv("FX_BUCKET_USD", "20")),
+        crypto_bucket_usd=float(os.getenv("CRYPTO_BUCKET_USD", "8")),
+        dashboard_owner_email=os.getenv("DASHBOARD_OWNER_EMAIL", ""),
         database_path=os.environ["DATABASE_PATH"],
         dashboard_host=os.getenv("DASHBOARD_HOST", "0.0.0.0"),
         dashboard_port=int(os.getenv("DASHBOARD_PORT", "8080")),
@@ -82,9 +88,21 @@ async def main() -> None:
     engine.set_notify(notify)
     await engine.start()
 
-    # Keep previous goal if any; otherwise set active scalp goal
+    # Ensure FX strategy is active and trading enabled
+    await engine.state.save_status_fields(trading_enabled=True)
+    await engine.breaker.reset(force_daily=True)
+    peak = float(await engine.state.get_kv("peak_equity", 0) or 0)
+    acc = await engine.exchange.get_account_snapshot(peak_equity=peak)
+    today = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).strftime("%Y-%m-%d")
+    await engine.state.save_status_fields(day_start_equity=acc.equity, pnl_today=0.0, day_key=today)
+    engine.risk.restore_day_start(acc.equity, today)
+
     if not await engine.state.get_active_goal():
-        await engine.handle_user_text("работай активно, цель 1$, частые маленькие сделки")
+        await engine.handle_user_text(
+            "FX multi scalp: часті маленькі угоди по валютах, ціль 1$ на день"
+        )
+
+    print("Buckets:", engine.buckets.snapshot(), flush=True)
 
     config = uvicorn.Config(
         app,
@@ -94,7 +112,6 @@ async def main() -> None:
         loop="asyncio",
     )
     server = uvicorn.Server(config)
-
     stop = asyncio.Event()
 
     def _stop(*_a: object) -> None:
@@ -108,11 +125,17 @@ async def main() -> None:
             pass
 
     print(
-        f"Control Center: http://0.0.0.0:{settings.dashboard_port}/  "
-        f"password={os.getenv('DASHBOARD_PASSWORD', 'astraforge')}",
+        f"Control Center: http://0.0.0.0:{settings.dashboard_port}/",
         flush=True,
     )
-    print(f"Mode={settings.trading_mode.value} exchange={settings.exchange_id}", flush=True)
+    print(
+        f"Mode={settings.trading_mode.value} style={settings.trading_style} exchange={settings.exchange_id}",
+        flush=True,
+    )
+    print(
+        "Auth: bind your email once, then OTP login. Set SMTP_* or RESEND_API_KEY for real email delivery.",
+        flush=True,
+    )
 
     serve_task = asyncio.create_task(server.serve(), name="dashboard")
     await stop.wait()

@@ -99,6 +99,9 @@ class RiskManager:
 
         daily_loss_pct = 0.0
         if self._day_start_equity and self._day_start_equity > 0:
+            # Ignore bogus 0-equity snapshots (e.g. Kraken nonce/balance blips)
+            if account.equity <= 0.01 and self._day_start_equity > 1:
+                return RiskCheckResult(allowed=True, reason="skip_limits_zero_equity_glitch")
             daily_pnl = account.equity - self._day_start_equity
             if daily_pnl < 0:
                 daily_loss_pct = abs(daily_pnl / self._day_start_equity) * 100.0

@@ -10,9 +10,11 @@ from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from astraforge.core.ai_agent import AIAgent
+from astraforge.core.bucket_store import BucketStore
 from astraforge.core.circuit_breaker import BreakerReason, CircuitBreaker, circuit_breaker
 from astraforge.core.config import Settings
 from astraforge.core.exchange import ExchangeClient
+from astraforge.core.fx_scalper import FxMultiScalper
 from astraforge.core.goal_interpreter import GoalInterpreter
 from astraforge.core.models import (
     ActionType,
@@ -28,6 +30,7 @@ from astraforge.core.order_executor import OrderExecutor
 from astraforge.core.risk_manager import RiskManager
 from astraforge.core.state_manager import StateManager
 from astraforge.utils.logging import get_logger
+from pathlib import Path
 
 logger = get_logger(__name__)
 
@@ -46,6 +49,17 @@ class TradingEngine:
         self.agent = AIAgent(settings)
         self.executor = OrderExecutor(self.exchange, self.risk, self.state, self.breaker)
         self.goals = GoalInterpreter(settings, self.risk)
+        bucket_path = Path(settings.database_path).with_name("buckets.json")
+        self.buckets = BucketStore(bucket_path)
+        # Seed buckets from settings on first run
+        if float(self.buckets.data.get("fx_bucket_usd") or 0) <= 0:
+            self.buckets.data["fx_bucket_usd"] = float(getattr(settings, "fx_bucket_usd", 20.0))
+        if float(self.buckets.data.get("crypto_hold_usd") or 0) <= 0:
+            self.buckets.data["crypto_hold_usd"] = float(getattr(settings, "crypto_bucket_usd", 8.0))
+        self.buckets.data["max_slots"] = int(getattr(settings, "fx_max_slots", 10))
+        self.buckets.data["target_slot_usd"] = float(getattr(settings, "fx_target_slot_usd", 2.0))
+        self.buckets.save()
+        self.fx = FxMultiScalper(settings, self.buckets, self.exchange, self.agent)
 
         self._running = False
         self._loop_task: asyncio.Task[None] | None = None
@@ -54,6 +68,7 @@ class TradingEngine:
         self._last_error: str | None = None
         self._goal_reached_notified = False
         self._last_report_day: str | None = None
+        self._last_fx_tick: dict[str, Any] = {}
 
     def set_notify(self, fn: NotifyFn) -> None:
         self._notify = fn
@@ -225,6 +240,38 @@ class TradingEngine:
             self._last_status_summary = (
                 f"paused: {risk_ok.reason or self.breaker.reason or 'trading disabled'}"
             )
+            return
+
+        # FX multi-scalp path (priority strategy)
+        if getattr(self.settings, "trading_style", "") == "fx_multi_scalp":
+            fx_result = await self.fx.tick()
+            self._last_fx_tick = fx_result
+            opened = fx_result.get("opened") or {}
+            closed = fx_result.get("closed") or []
+            ai = fx_result.get("ai") or {}
+            parts = []
+            for c in closed:
+                if c.get("ok"):
+                    parts.append(f"FX close {c.get('symbol')} pnl={float(c.get('pnl') or 0):+.4f}")
+            if opened.get("ok"):
+                slot = opened.get("slot") or {}
+                parts.append(f"FX open {slot.get('symbol')} @ {slot.get('entry')}")
+            elif opened.get("skipped"):
+                parts.append(f"FX wait: {opened.get('reason')}")
+            pick = (ai.get("pick") or {})
+            if pick:
+                parts.append(f"AI:{pick.get('action')}:{pick.get('symbol') or '-'} ({pick.get('reason','')[:80]})")
+            self._last_status_summary = " | ".join(parts) or "FX idle"
+            await self.state.log_decision(
+                {
+                    "type": "fx_tick",
+                    "result": fx_result,
+                    "pnl_today": pnl_today,
+                    "equity": account.equity,
+                    "reasoning": self._last_status_summary,
+                }
+            )
+            logger.info("tick_complete", summary=self._last_status_summary)
             return
 
         if goal is None:

@@ -23,7 +23,7 @@ HARD_MAX_LEVERAGE = 5.0
 HARD_MAX_POSITION_PCT = 4.0
 # Spot micro-accounts (no leverage): allow larger slice so exchange mins are reachable.
 HARD_MAX_POSITION_PCT_SPOT_MICRO = 35.0
-HARD_MAX_OPEN_POSITIONS = 3
+HARD_MAX_OPEN_POSITIONS = 10
 MICRO_EQUITY_USD = 100.0
 
 
@@ -62,20 +62,26 @@ class Settings(BaseSettings):
     max_drawdown_pct: float = Field(default=6.0, ge=1.0, le=HARD_MAX_DRAWDOWN_PCT)
     max_leverage: float = Field(default=5.0, ge=1.0, le=HARD_MAX_LEVERAGE)
     max_position_pct: float = Field(default=3.5, ge=0.5, le=HARD_MAX_POSITION_PCT_SPOT_MICRO)
-    max_open_positions: int = Field(default=3, ge=1, le=HARD_MAX_OPEN_POSITIONS)
+    max_open_positions: int = Field(default=10, ge=1, le=HARD_MAX_OPEN_POSITIONS)
 
     # Universe
     trade_symbols: str = (
-        "BTC/USDT:USDT,ETH/USDT:USDT,SOL/USDT:USDT,BNB/USDT:USDT,XRP/USDT:USDT"
+        "USD/CAD,EUR/CAD,EUR/USD,GBP/USD,AUD/USD,SOL/USD,XRP/USD,DOGE/USD"
     )
 
     # Strategy
-    trading_style: Literal["swing", "momentum_scalp"] = "momentum_scalp"
+    trading_style: Literal["swing", "momentum_scalp", "fx_multi_scalp"] = "fx_multi_scalp"
     candle_timeframe: str = "5m"
     agent_loop_interval_sec: int = 30
     # Kraken promo / zero-fee accounts: allow tiny take-profits
     zero_fee_mode: bool = True
     min_take_profit_pct: float = 0.12  # close even on small green if momentum fades
+    # FX buckets
+    fx_bucket_usd: float = 20.0
+    crypto_bucket_usd: float = 8.0
+    fx_max_slots: int = 10
+    fx_target_slot_usd: float = 2.0
+    dashboard_owner_email: str = ""
 
     # App
     database_path: str = "./data/astraforge.db"
