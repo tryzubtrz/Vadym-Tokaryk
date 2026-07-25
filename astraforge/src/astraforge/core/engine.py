@@ -280,8 +280,19 @@ class TradingEngine:
             if not bool(self.buckets.data.get("crypto_trading_enabled", False)):
                 parts[0] = f"FX-only ${split['fx_bucket_usd']:.2f}"
             for c in closed:
-                if c.get("ok"):
-                    parts.append(f"FX close {c.get('symbol')} pnl={float(c.get('pnl') or 0):+.4f}")
+                if not c.get("ok"):
+                    if c.get("error"):
+                        parts.append(f"FX err {c.get('symbol')}:{c.get('error')}")
+                    continue
+                if c.get("held") or c.get("action") == "hold":
+                    parts.append(
+                        f"FX hold {c.get('symbol')} {float(c.get('pnl_pct') or 0):+.3f}% "
+                        f"{float(c.get('age_sec') or 0):.0f}s"
+                    )
+                    continue
+                parts.append(
+                    f"FX close {c.get('symbol')} pnl={float(c.get('pnl') or 0):+.4f}"
+                )
             if opened.get("ok"):
                 slot = opened.get("slot") or {}
                 parts.append(f"FX open {slot.get('symbol')} @ {slot.get('entry')}")

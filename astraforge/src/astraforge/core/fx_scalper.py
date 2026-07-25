@@ -169,7 +169,11 @@ class FxMultiScalper:
             return {"action": "wait", "symbol": None, "reason": f"fallback_wait:{exc}"}
 
     async def manage_open_slots(self) -> list[dict[str, Any]]:
-        """FX exits: >=0.04% close now; smaller green waits up to 2 minutes."""
+        """FX exits: >=0.04% close now; smaller green waits up to 2 minutes.
+
+        Long exit marks use *bid* (executable sell), not last — last often sits
+        inside the spread and falsely looks red, so slots never rotate.
+        """
         results: list[dict[str, Any]] = []
         slots = list(self.store.data.get("open_slots") or [])
         now = datetime.now(timezone.utc)
@@ -182,7 +186,12 @@ class FxMultiScalper:
             amount = float(slot["amount"])
             try:
                 t = await self.exchange.fetch_ticker(symbol)
-                px = float(t.get("last") or t.get("close") or 0)
+                last = float(t.get("last") or t.get("close") or 0)
+                bid = float(t.get("bid") or 0)
+                ask = float(t.get("ask") or 0)
+                # Executable close price for a long spot sell
+                px = bid if bid > 0 else last
+                mark = last if last > 0 else px
             except Exception as exc:  # noqa: BLE001
                 results.append({"ok": False, "symbol": symbol, "error": str(exc)})
                 continue
@@ -199,23 +208,50 @@ class FxMultiScalper:
 
             action = None
             reason = ""
-            if emergency and px <= emergency:
+            # Emergency still uses mark/last (crash detection)
+            if emergency and mark <= emergency:
                 action = "emergency_stop"
-                reason = f"yearly-low emergency stop hit @ {px}"
+                reason = f"yearly-low emergency stop hit @ {mark}"
             elif pnl_pct >= instant_tp:
-                # Priority: 0.04%+ → close immediately and rotate
+                # Priority: 0.04%+ on bid → close immediately and rotate
                 action = "pct_tp"
                 reason = f"+{pnl_pct:.4f}% >= {instant_tp:.2f}% — close now"
-            elif age_sec >= max_hold_green and pnl_pct > 0:
-                # e.g. +0.03%: wait 2 minutes then take it
+            elif age_sec >= max_hold_green and px >= entry:
+                # Any green (or flat) on bid after 2 min → take it / free capital
                 action = "time_green"
-                reason = f"held {age_sec:.0f}s with +{pnl_pct:.4f}% (<{instant_tp:.2f}%) — rotate"
-            elif age_sec >= max_hold_be and px >= entry:
+                reason = f"held {age_sec:.0f}s bid {pnl_pct:+.4f}% (<{instant_tp:.2f}%) — rotate"
+            elif age_sec >= max_hold_be and px >= entry * 0.9999:
+                # After 5 min: free capital if within ~1 pip of entry on bid
                 action = "time_be"
-                reason = f"held {age_sec:.0f}s at/above entry — free capital"
+                reason = f"held {age_sec:.0f}s near entry on bid — free capital"
             if not action:
+                results.append(
+                    {
+                        "ok": True,
+                        "action": "hold",
+                        "symbol": symbol,
+                        "pnl_pct": pnl_pct,
+                        "age_sec": age_sec,
+                        "bid": px,
+                        "entry": entry,
+                        "held": True,
+                    }
+                )
                 continue
-            if action != "emergency_stop" and px < entry:
+            if action != "emergency_stop" and px < entry * 0.9999:
+                results.append(
+                    {
+                        "ok": True,
+                        "action": "hold",
+                        "symbol": symbol,
+                        "pnl_pct": pnl_pct,
+                        "age_sec": age_sec,
+                        "bid": px,
+                        "entry": entry,
+                        "held": True,
+                        "reason": "still_red_on_bid",
+                    }
+                )
                 continue
             try:
                 order = await self.exchange.create_market_order(symbol, "sell", amount, reduce_only=True)
