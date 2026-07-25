@@ -377,15 +377,35 @@ class AIAgent:
             logger.debug("skip_unknown_action", action=action)
             return None
         raw["action"] = action
+        # LLM often sends explicit nulls — drop so pydantic defaults apply
+        for key in (
+            "size_pct_of_equity",
+            "leverage",
+            "confidence",
+            "stop_loss_pct",
+            "take_profit_pct",
+            "symbol",
+            "side",
+            "reasoning",
+        ):
+            if key in raw and raw[key] is None:
+                raw.pop(key, None)
         if raw.get("side"):
             side = str(raw["side"]).strip().lower()
             if side in {"buy", "long"}:
                 raw["side"] = "long"
             elif side in {"sell", "short"}:
                 raw["side"] = "short"
+        elif action == "close" and self.settings.is_spot:
+            raw["side"] = "long"
         # Spot: never open shorts
         if self.settings.is_spot and action == "open_short":
             return None
+        if action in {"close", "reduce", "hold"}:
+            raw.setdefault("size_pct_of_equity", 0.0)
+            raw.setdefault("leverage", 1.0)
+        if "confidence" not in raw:
+            raw["confidence"] = 0.55 if action == "close" else 0.4
         # Clamp tiny TPs for zero-fee mode
         for key in ("take_profit_pct", "stop_loss_pct"):
             if raw.get(key) is None:
@@ -393,7 +413,7 @@ class AIAgent:
             try:
                 val = float(raw[key])
             except (TypeError, ValueError):
-                raw[key] = None
+                raw.pop(key, None)
                 continue
             if key == "take_profit_pct" and 0 < val < 0.05:
                 raw[key] = 0.05
