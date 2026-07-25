@@ -55,7 +55,38 @@
 
 ---
 
-## Быстрый старт (Docker)
+## Самый простой запуск — ОДИН ФАЙЛ
+
+Не нужен Docker и не нужна вся папка модулей. Достаточно файла `astraforge_one.py`.
+
+```bash
+cd astraforge
+pip install ccxt pandas httpx aiosqlite pydantic
+# опционально для Telegram:
+# pip install aiogram
+
+python astraforge_one.py
+```
+
+Скрипт спросит:
+1. **Exchange API KEY + SECRET** (обязательно) — права только Read + Futures, без Withdrawal
+2. Telegram-токен (можно пропустить → управление в консоли)
+3. LLM-ключ (можно пропустить → встроенная heuristic-логика)
+
+После этого бот стартует в **paper mode** и ждёт цель, например:
+```text
+make 100 dollars today
+```
+или в консоли/Telegram:
+```text
+сделай сегодня 100 долларов
+```
+
+Можно заранее положить ключи в `.env` — тогда спрашивать почти ничего не будет.
+
+---
+
+## Быстрый старт (Docker, полный проект)
 
 ### 1. Получите ключи
 
