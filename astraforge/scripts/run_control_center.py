@@ -30,7 +30,7 @@ os.environ.setdefault("AGENT_LOOP_INTERVAL_SEC", "90")
 os.environ.setdefault("MAX_POSITION_PCT", "35")
 os.environ.setdefault("MAX_OPEN_POSITIONS", "1")
 os.environ["ZERO_FEE_MODE"] = "false"
-os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.55")
+os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.65")
 os.environ.setdefault("FX_BUCKET_USD", "26.5")
 os.environ.setdefault("CRYPTO_BUCKET_USD", "0")
 # Force 7% — .env may still say 6.0 from pre-FX-only days
@@ -102,8 +102,7 @@ async def main() -> None:
     serve_task = asyncio.create_task(server.serve(), name="dashboard")
 
     await engine.start()
-    # SAFETY: fee-paying Kraken scalp was burning equity — start paused until owner resumes
-    await engine.state.save_status_fields(trading_enabled=False)
+    await engine.state.save_status_fields(trading_enabled=True)
     try:
         await engine.breaker.reset(force_daily=True)
         peak = float(await engine.state.get_kv("peak_equity", 0) or 0)
@@ -119,21 +118,27 @@ async def main() -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"startup balance soft-fail: {exc}", flush=True)
 
-    # Force FX-only capital allocation on every start
+    # FX-only + rare/larger-move swing settings
     try:
-        engine.buckets.data["crypto_trading_enabled"] = False
-        engine.buckets.data["profit_to_crypto_pct"] = 0.0
-        engine.buckets.data["crypto_hold_usd"] = 0.0
-        engine.buckets.data["pending_crypto_buy_usd"] = 0.0
-        # Fee-aware TP floor (~0.45%+ with 0.2% Kraken taker each side)
-        engine.buckets.data["fx_instant_tp_pct"] = max(
-            float(engine.buckets.data.get("fx_instant_tp_pct") or 0), 0.50
-        )
+        b = engine.buckets.data
+        b["crypto_trading_enabled"] = False
+        b["profit_to_crypto_pct"] = 0.0
+        b["crypto_hold_usd"] = 0.0
+        b["pending_crypto_buy_usd"] = 0.0
+        b["fx_mode"] = "swing"
+        b["fx_instant_tp_pct"] = 0.65
+        b["max_hold_sec_force_be"] = 43_200
+        b["working_capital_pct"] = 0.35
+        b["open_cooldown_sec"] = 2_700
+        b["max_slots"] = 1
+        b["target_slot_usd"] = 9.0
+        b["buy_zone_pct"] = 0.25
+        b["range_lookback"] = 60
+        b["fx_pairs"] = ["USD/CAD", "EUR/USD"]
         engine.buckets.save()
     except Exception as exc:  # noqa: BLE001
-        print(f"bucket FX-only soft-fail: {exc}", flush=True)
+        print(f"bucket swing soft-fail: {exc}", flush=True)
 
-    # Recalibrate peak after FX-only switch (crypto drag must not keep FX paused)
     try:
         peak = float(await engine.state.get_kv("peak_equity", 0) or 0)
         acc = await engine.exchange.get_account_snapshot(peak_equity=0.0, force=True)
@@ -142,27 +147,26 @@ async def main() -> None:
             engine.risk.restore_peak(acc.equity, force=True)
             print(f"peak_equity recalibrated to {acc.equity:.4f} (was {peak:.4f})", flush=True)
         await engine.breaker.reset(force_daily=True)
-        # Keep trading PAUSED — owner must press Resume after understanding fees
-        await engine.state.save_status_fields(trading_enabled=False)
+        await engine.state.save_status_fields(trading_enabled=True)
         print(
-            "SAFETY PAUSE: Kraken taker ~0.2%/side. Tiny FX scalp was losing money. "
-            "Resume only when ready; opens stay blocked while fees >= 0.05%/side.",
+            "SWING MODE: rare entries, close only at >=0.65% (fee-aware), "
+            "~35% working capital, 45min cooldown, pairs USD/CAD+EUR/USD.",
             flush=True,
         )
     except Exception as exc:  # noqa: BLE001
         print(f"peak recalibrate soft-fail: {exc}", flush=True)
 
+    swing_goal = (
+        "FX swing: рідкісні угоди, закриття лише від +0.55% після комісій, "
+        "робочі ~35% депозиту, крипта вимкнена, ціль 1$ обережно."
+    )
     if not await engine.state.get_active_goal():
-        await engine.handle_user_text(
-            "FX-only: всі гроші на валюту, маленькі плюси, ціль 1$ на день. Крипта вимкнена."
-        )
+        await engine.handle_user_text(swing_goal)
     else:
-        # Refresh goal text so UI/agent don't keep promoting crypto
         g = await engine.state.get_active_goal()
-        if g and "крипт" in (g.raw_text or "").lower():
-            await engine.handle_user_text(
-                "FX-only: всі гроші на валюту, маленькі плюси, ціль 1$ на день. Крипта вимкнена."
-            )
+        raw = (g.raw_text or "").lower() if g else ""
+        if g and ("крипт" in raw or "0.04" in raw or "маленьк" in raw):
+            await engine.handle_user_text(swing_goal)
 
     print("Buckets:", engine.buckets.snapshot(), flush=True)
     print(

@@ -196,7 +196,7 @@ class FxMultiScalper:
         results: list[dict[str, Any]] = []
         slots = list(self.store.data.get("open_slots") or [])
         now = datetime.now(timezone.utc)
-        configured_tp = float(self.store.data.get("fx_instant_tp_pct") or 0.55)
+        configured_tp = float(self.store.data.get("fx_instant_tp_pct") or 0.65)
         max_hold_be = float(self.store.data.get("max_hold_sec_force_be") or 43_200)
         for slot in slots:
             symbol = slot["symbol"]
@@ -323,12 +323,13 @@ class FxMultiScalper:
         if open_n >= max_slots or fx_cap < 4:
             return {"skipped": True, "reason": "no_slot_capacity_or_capital"}
 
-        configured_tp = float(snap.get("fx_instant_tp_pct") or 0.55)
-        sample_cost = self._round_trip_cost_pct("USD/CAD", bid=1.41, ask=1.412)
-        if not bool(getattr(self.settings, "zero_fee_mode", False)) and configured_tp + 1e-9 < sample_cost:
+        configured_tp = float(snap.get("fx_instant_tp_pct") or 0.65)
+        # Gate on fees + small buffer (live spread checked at exit time)
+        fee_rt = 2.0 * self._taker_fee_pct("USD/CAD") + 0.05
+        if not bool(getattr(self.settings, "zero_fee_mode", False)) and configured_tp + 1e-9 < fee_rt:
             return {
                 "skipped": True,
-                "reason": f"tp_{configured_tp:.2f}%_below_fee_rt_{sample_cost:.2f}%",
+                "reason": f"tp_{configured_tp:.2f}%_below_fee_rt_{fee_rt:.2f}%",
             }
 
         cooldown = float(snap.get("open_cooldown_sec") or 2700)

@@ -45,7 +45,7 @@ class BucketStore:
             "profit_to_crypto_pct": 0.0,
             # Rare + larger move (fee-aware). Close only when move clears fees (~0.55%+).
             "fx_mode": "swing",
-            "fx_instant_tp_pct": 0.55,
+            "fx_instant_tp_pct": 0.65,
             "max_hold_sec_green": 86_400,
             "max_hold_sec_force_be": 43_200,  # 12h then absorb cash (do not fee-close)
             "working_capital_pct": 0.35,
