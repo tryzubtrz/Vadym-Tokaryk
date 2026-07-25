@@ -1,0 +1,55 @@
+# AstraForge AI — default non-secret configuration
+# Secrets and API keys live in .env only.
+
+app:
+  name: AstraForge AI
+  version: "1.0.0"
+
+trading:
+  default_timeframe: "15m"
+  lookback_candles: 100
+  decision_interval_sec: 60
+  symbols:
+    - "BTC/USDT:USDT"
+    - "ETH/USDT:USDT"
+    - "SOL/USDT:USDT"
+    - "BNB/USDT:USDT"
+    - "XRP/USDT:USDT"
+
+# Hard safety envelope — code enforces these as absolute ceilings.
+# Environment values may only tighten them, never exceed.
+risk_ceilings:
+  daily_loss_limit_pct: 2.5
+  max_drawdown_pct: 7.0
+  max_leverage: 5
+  max_position_pct: 4.0
+  max_open_positions: 3
+
+risk_profiles:
+  conservative:
+    daily_loss_limit_pct: 1.5
+    max_drawdown_pct: 4.0
+    max_leverage: 3
+    max_position_pct: 2.0
+    target_aggression: 0.35
+  balanced:
+    daily_loss_limit_pct: 2.5
+    max_drawdown_pct: 6.0
+    max_leverage: 5
+    max_position_pct: 3.5
+    target_aggression: 0.6
+  aggressive:
+    daily_loss_limit_pct: 2.5
+    max_drawdown_pct: 7.0
+    max_leverage: 5
+    max_position_pct: 4.0
+    target_aggression: 0.85
+
+indicators:
+  rsi_period: 14
+  ema_fast: 9
+  ema_slow: 21
+  atr_period: 14
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9

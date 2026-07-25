@@ -1,0 +1,24 @@
+services:
+  astraforge:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: astraforge-ai
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config:ro
+      - ./.env:/app/.env:ro
+    environment:
+      - DATABASE_PATH=/app/data/astraforge.db
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
