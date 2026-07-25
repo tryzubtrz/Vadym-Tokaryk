@@ -418,9 +418,7 @@ class TradingEngine:
             return [f"crypto skip: budget ${budget:.2f} too small"]
 
         free_usd = float(await self.exchange.free_balance("USD"))
-        # Never spend FX-reserved USD: keep FX target aside when possible
-        fx_need = float(snap.get("fx_bucket_usd") or 20.0)
-        # Approximate FX cash already parked in CAD
+        # CAD float covers much of FX — give crypto bucket priority on remaining USD
         cad_usd = 0.0
         try:
             cad = float(await self.exchange.free_balance("CAD"))
@@ -431,12 +429,12 @@ class TradingEngine:
                     cad_usd = cad / px
         except Exception:  # noqa: BLE001
             pass
-        fx_usd_still_needed = max(0.0, fx_need - cad_usd)
-        crypto_cash = min(budget, max(0.0, free_usd - fx_usd_still_needed))
-        # If CAD already covers most FX float, free USD can go to crypto up to budget
-        if cad_usd >= fx_need * 0.5:
-            crypto_cash = min(budget, free_usd * 0.98)
-        crypto_cash = max(0.0, crypto_cash * 0.98)
+        # Leave a small USD buffer for FX EUR/GBP lots (~$5), rest up to crypto budget
+        usd_buffer_for_fx = 5.0 if cad_usd < 4 else 2.0
+        crypto_cash = min(budget, max(0.0, free_usd - usd_buffer_for_fx)) * 0.98
+        if crypto_cash < 1.5 and free_usd >= 1.5:
+            # Last resort: still allow tiny crypto if any USD left
+            crypto_cash = min(budget, free_usd * 0.90)
         if crypto_cash < 1.5:
             return [f"crypto skip: cash ${crypto_cash:.2f} (usd={free_usd:.2f}, cad≈${cad_usd:.2f})"]
 
@@ -492,10 +490,9 @@ class TradingEngine:
 
             # Refresh cash after closes
             free_usd = float(await self.exchange.free_balance("USD"))
-            if cad_usd >= fx_need * 0.5:
-                crypto_cash = min(budget, free_usd * 0.98)
-            else:
-                crypto_cash = min(budget, max(0.0, free_usd - fx_usd_still_needed)) * 0.98
+            crypto_cash = min(budget, max(0.0, free_usd - usd_buffer_for_fx)) * 0.98
+            if crypto_cash < 1.5 and free_usd >= 1.5:
+                crypto_cash = min(budget, free_usd * 0.90)
             crypto_account.available_balance = max(0.0, crypto_cash)
             crypto_account.equity = max(budget, crypto_cash)
 
@@ -555,13 +552,13 @@ class TradingEngine:
         account: Any,
         markets: list[Any],
     ) -> list[TradeDecision]:
-        """Close winners with tiny green when fees ≈ 0 and momentum cools."""
+        """Close winners with tiny green fast — better small win than long wait."""
         if not getattr(self.settings, "zero_fee_mode", True):
             return []
         if not account.positions:
             return []
-        min_tp = float(getattr(self.settings, "min_take_profit_pct", 0.12))
-        lock_tp = max(min_tp * 2.5, 0.30)  # always bank stronger scalp
+        min_tp = float(getattr(self.settings, "min_take_profit_pct", 0.05))
+        lock_tp = max(min_tp * 1.5, 0.10)  # bank quickly
         out: list[TradeDecision] = []
         for p in account.positions:
             if p.side != Side.LONG or p.entry_price <= 0 or p.mark_price <= 0:
@@ -575,11 +572,16 @@ class TradingEngine:
             mom = float(ind.get("momentum_5m_pct") or 0.0)
             rsi = ind.get("rsi")
             pressure = str(book.get("pressure") or "neutral")
+            # Fierce: any green past min_tp is enough; don't wait for moon
             cool = (
-                mom < 0.05
-                or pressure == "ask_heavy"
-                or (rsi is not None and float(rsi) >= 68)
-                or pnl_pct >= lock_tp
+                True
+                if pnl_pct >= lock_tp
+                else (
+                    mom < 0.15
+                    or pressure == "ask_heavy"
+                    or (rsi is not None and float(rsi) >= 62)
+                    or pnl_pct >= min_tp
+                )
             )
             if not cool:
                 continue
@@ -588,9 +590,9 @@ class TradingEngine:
                     action=ActionType.CLOSE,
                     symbol=p.symbol,
                     side=p.side,
-                    confidence=0.85,
+                    confidence=0.9,
                     reasoning=(
-                        f"Zero-fee scalp TP: +{pnl_pct:.3f}% "
+                        f"Quick small TP: +{pnl_pct:.3f}% "
                         f"(min={min_tp:.2f}%) mom5m={mom:.3f} "
                         f"rsi={rsi} book={pressure}"
                     ),
