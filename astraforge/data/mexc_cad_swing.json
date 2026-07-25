@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "symbol": "CAD/USDT:USDT",
+  "leverage": 1,
+  "target_notional_usdt": 9.0,
+  "min_tp_pct": 0.25,
+  "max_hold_sec": 43200,
+  "open_cooldown_sec": 2700,
+  "range_lookback": 40,
+  "buy_zone_pct": 0.3,
+  "open": null,
+  "last_open_at": "",
+  "last_close_at": "",
+  "realized_pnl_usdt": 0.0,
+  "updated_at": "2026-07-25T09:29:45.913092+00:00"
+}

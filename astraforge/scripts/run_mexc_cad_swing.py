@@ -1,0 +1,321 @@
+"""MEXC CAD/USDT perpetual swing trial — 1x only, fee-aware exits.
+
+Safety rules (hard):
+- leverage forced to 1
+- one position max
+- close only when move clears fees (~0.25%+)
+- small notional (~$8–10)
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import os
+import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import ccxt.async_support as ccxt
+
+ROOT = Path(__file__).resolve().parents[1]
+STATE_PATH = ROOT / "data" / "mexc_cad_swing.json"
+SYMBOL = "CAD/USDT:USDT"
+
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _load_env() -> None:
+    env = ROOT / ".env"
+    if not env.exists():
+        return
+    for line in env.read_text().splitlines():
+        if not line.strip() or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+
+def _default_state() -> dict[str, Any]:
+    return {
+        "enabled": True,
+        "symbol": SYMBOL,
+        "leverage": 1,
+        "target_notional_usdt": 9.0,
+        "min_tp_pct": 0.25,  # taker RT ~0.08% + buffer/funding
+        "max_hold_sec": 43_200,  # 12h then flatten
+        "open_cooldown_sec": 2_700,
+        "range_lookback": 40,
+        "buy_zone_pct": 0.30,
+        "open": None,
+        "last_open_at": "",
+        "last_close_at": "",
+        "realized_pnl_usdt": 0.0,
+        "updated_at": _utcnow(),
+    }
+
+
+def load_state() -> dict[str, Any]:
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    base = _default_state()
+    if STATE_PATH.exists():
+        try:
+            raw = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+            base.update(raw or {})
+        except Exception:
+            pass
+    # hard safety clamps
+    base["leverage"] = 1
+    base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.25), 0.20)
+    base["target_notional_usdt"] = min(max(float(base.get("target_notional_usdt") or 9.0), 3.0), 15.0)
+    return base
+
+
+def save_state(state: dict[str, Any]) -> None:
+    state["leverage"] = 1
+    state["updated_at"] = _utcnow()
+    STATE_PATH.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+class MexcCadSwing:
+    def __init__(self) -> None:
+        key = os.environ.get("MEXC_API_KEY") or os.environ.get("EXCHANGE_API_KEY_MEXC") or ""
+        secret = os.environ.get("MEXC_API_SECRET") or os.environ.get("EXCHANGE_API_SECRET_MEXC") or ""
+        if not key or not secret:
+            raise RuntimeError(
+                "Missing MEXC_API_KEY / MEXC_API_SECRET in .env "
+                "(create trade-only API key on MEXC; no withdrawal)"
+            )
+        self.live = os.environ.get("MEXC_LIVE_CONFIRMED", "false").lower() in {"1", "true", "yes"}
+        self.ex = ccxt.mexc(
+            {
+                "apiKey": key,
+                "secret": secret,
+                "enableRateLimit": True,
+                "options": {"defaultType": "swap"},
+            }
+        )
+        self.state = load_state()
+
+    async def setup(self) -> None:
+        await self.ex.load_markets()
+        # Force 1x — never higher for this trial
+        try:
+            await self.ex.set_leverage(1, SYMBOL)
+        except Exception as exc:  # noqa: BLE001
+            print(f"set_leverage soft-fail: {exc}", flush=True)
+        try:
+            await self.ex.set_margin_mode("cross", SYMBOL)
+        except Exception:
+            pass
+
+    async def close(self) -> None:
+        await self.ex.close()
+
+    async def free_usdt(self) -> float:
+        bal = await self.ex.fetch_balance()
+        # swap wallet may be under USDT free
+        free = bal.get("USDT") or {}
+        return float(free.get("free") or bal.get("free", {}).get("USDT") or 0)
+
+    async def mark(self) -> dict[str, float]:
+        t = await self.ex.fetch_ticker(SYMBOL)
+        last = float(t.get("last") or 0)
+        bid = float(t.get("bid") or last)
+        ask = float(t.get("ask") or last)
+        return {"last": last, "bid": bid, "ask": ask}
+
+    async def in_buy_zone(self) -> dict[str, Any]:
+        ohlcv = await self.ex.fetch_ohlcv(SYMBOL, "15m", limit=int(self.state.get("range_lookback") or 40))
+        if not ohlcv:
+            return {"ok": False, "reason": "no_candles"}
+        lows = [float(c[3]) for c in ohlcv]
+        highs = [float(c[2]) for c in ohlcv]
+        closes = [float(c[4]) for c in ohlcv]
+        lo, hi = min(lows), max(highs)
+        px = closes[-1]
+        if hi <= lo:
+            return {"ok": False, "reason": "flat_range", "price": px}
+        pos = (px - lo) / (hi - lo)
+        zone = float(self.state.get("buy_zone_pct") or 0.30)
+        return {
+            "ok": True,
+            "price": px,
+            "range_pos": pos,
+            "in_buy_zone": pos <= zone,
+            "lo": lo,
+            "hi": hi,
+        }
+
+    def _cooldown_ok(self) -> tuple[bool, str]:
+        cd = float(self.state.get("open_cooldown_sec") or 2700)
+        last = str(self.state.get("last_open_at") or self.state.get("last_close_at") or "")
+        if not last or cd <= 0:
+            return True, ""
+        try:
+            dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+            age = (datetime.now(timezone.utc) - dt).total_seconds()
+            if age < cd:
+                return False, f"cooldown_{int(cd - age)}s"
+        except Exception:
+            return True, ""
+        return True, ""
+
+    async def manage(self) -> str:
+        open_pos = self.state.get("open")
+        if not open_pos:
+            return "flat"
+        m = await self.mark()
+        entry = float(open_pos["entry"])
+        side = str(open_pos.get("side") or "long")
+        # long CADUSDT: exit on bid
+        px = m["bid"] if side == "long" else m["ask"]
+        pnl_pct = ((px - entry) / entry) * 100.0 if side == "long" else ((entry - px) / entry) * 100.0
+        min_tp = float(self.state.get("min_tp_pct") or 0.25)
+        age = 0.0
+        try:
+            opened = datetime.fromisoformat(str(open_pos.get("opened_at") or "").replace("Z", "+00:00"))
+            age = (datetime.now(timezone.utc) - opened).total_seconds()
+        except Exception:
+            age = 0.0
+        max_hold = float(self.state.get("max_hold_sec") or 43_200)
+
+        action = None
+        reason = ""
+        if pnl_pct >= min_tp:
+            action = "tp"
+            reason = f"+{pnl_pct:.3f}% >= {min_tp:.2f}%"
+        elif age >= max_hold:
+            action = "time"
+            reason = f"held {age/3600:.1f}h pnl={pnl_pct:+.3f}%"
+
+        if not action:
+            return f"hold {side} {pnl_pct:+.3f}% need+{min_tp:.2f}% age={age:.0f}s px={px}"
+
+        amount = float(open_pos["contracts"])
+        if not self.live:
+            self.state["open"] = None
+            self.state["last_close_at"] = _utcnow()
+            save_state(self.state)
+            return f"PAPER close {action} {reason}"
+
+        close_side = "sell" if side == "long" else "buy"
+        order = await self.ex.create_order(SYMBOL, "market", close_side, amount, params={"reduceOnly": True})
+        fill = float(order.get("average") or order.get("price") or px)
+        realized = (fill - entry) * amount if side == "long" else (entry - fill) * amount
+        # contracts are CAD; PnL approx in USDT already for linear
+        self.state["realized_pnl_usdt"] = float(self.state.get("realized_pnl_usdt") or 0) + realized
+        self.state["open"] = None
+        self.state["last_close_at"] = _utcnow()
+        save_state(self.state)
+        return f"CLOSE {action} pnl≈{realized:+.4f} USDT ({reason}) order={order.get('id')}"
+
+    async def maybe_open(self) -> str:
+        if self.state.get("open"):
+            return "skip: already open"
+        ok, why = self._cooldown_ok()
+        if not ok:
+            return f"skip: {why}"
+
+        zone = await self.in_buy_zone()
+        if not zone.get("ok"):
+            return f"skip: {zone.get('reason')}"
+        if not zone.get("in_buy_zone"):
+            return f"wait: range_pos={float(zone.get('range_pos') or 0):.2f} not in buy zone"
+
+        free = await self.free_usdt()
+        target = float(self.state.get("target_notional_usdt") or 9.0)
+        if free < max(3.0, target * 0.5):
+            return f"skip: USDT free={free:.2f} need≈{target:.2f}"
+
+        m = await self.mark()
+        px = m["ask"]
+        if px <= 0:
+            return "skip: bad price"
+        # 1 contract = 1 CAD ≈ px USDT notional
+        notional = min(target, free * 0.95)
+        contracts = max(1.0, int(notional / px))
+        # recompute notional
+        notional = contracts * px
+        if notional > free * 0.98:
+            contracts = max(1.0, int((free * 0.9) / px))
+            notional = contracts * px
+
+        if not self.live:
+            self.state["open"] = {
+                "id": str(uuid.uuid4())[:8],
+                "side": "long",
+                "contracts": contracts,
+                "entry": px,
+                "notional_usdt": notional,
+                "opened_at": _utcnow(),
+                "mode": "paper",
+            }
+            self.state["last_open_at"] = _utcnow()
+            save_state(self.state)
+            return f"PAPER open long {contracts} CAD @ {px} (~{notional:.2f} USDT)"
+
+        # ensure leverage 1 each open
+        try:
+            await self.ex.set_leverage(1, SYMBOL)
+        except Exception:
+            pass
+        order = await self.ex.create_order(SYMBOL, "market", "buy", contracts)
+        fill = float(order.get("average") or order.get("price") or px)
+        self.state["open"] = {
+            "id": str(uuid.uuid4())[:8],
+            "side": "long",
+            "contracts": float(order.get("amount") or contracts),
+            "entry": fill,
+            "notional_usdt": float(order.get("amount") or contracts) * fill,
+            "opened_at": _utcnow(),
+            "order_id": order.get("id"),
+            "mode": "live",
+        }
+        self.state["last_open_at"] = _utcnow()
+        save_state(self.state)
+        return f"OPEN long {contracts} CAD @ {fill} (~{notional:.2f} USDT) id={order.get('id')}"
+
+    async def tick(self) -> str:
+        free = await self.free_usdt()
+        m = await self.mark()
+        managed = await self.manage()
+        opened = "—"
+        if not self.state.get("open"):
+            opened = await self.maybe_open()
+        save_state(self.state)
+        return (
+            f"[{'LIVE' if self.live else 'PAPER'}] USDT={free:.2f} mark={m['last']:.4f} | "
+            f"{managed} | {opened} | realized={float(self.state.get('realized_pnl_usdt') or 0):+.4f}"
+        )
+
+
+async def main() -> None:
+    _load_env()
+    interval = int(os.environ.get("MEXC_LOOP_SEC", "60"))
+    bot = MexcCadSwing()
+    await bot.setup()
+    print(
+        f"MEXC CADUSDT swing trial | live={bot.live} | lev=1 | "
+        f"tp>={bot.state['min_tp_pct']}% | notional≈{bot.state['target_notional_usdt']} USDT",
+        flush=True,
+    )
+    print(f"State: {STATE_PATH}", flush=True)
+    try:
+        while True:
+            try:
+                msg = await bot.tick()
+                print(f"{_utcnow()} {msg}", flush=True)
+            except Exception as exc:  # noqa: BLE001
+                print(f"{_utcnow()} tick_error: {exc}", flush=True)
+            await asyncio.sleep(interval)
+    finally:
+        await bot.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
