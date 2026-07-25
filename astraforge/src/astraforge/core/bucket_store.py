@@ -41,9 +41,11 @@ class BucketStore:
                 "GBP/USD",
                 "AUD/USD",
             ],
-            "fx_target_usd": 20.0,  # fixed FX allocation; rest of equity → crypto
+            "fx_target_usd": 20.0,
             "auto_split_equity": True,
             "auto_convert_fx": True,
+            "crypto_trading_enabled": False,  # FX-only mode
+            "profit_to_crypto_pct": 0.0,
             # FX exit: >= instant_tp_pct → close now; else any green waits max_hold_sec_green
             "fx_instant_tp_pct": 0.04,
             "max_hold_sec_green": 120,   # 2 min for sub-0.04% greens
@@ -54,7 +56,6 @@ class BucketStore:
             "range_lookback": 40,
             "buy_zone_pct": 0.30,
             "emergency_stop_mode": "yearly_low",
-            "profit_to_crypto_pct": 0.10,
             "realized_crypto_pnl_total": 0.0,
             "fx_profit_total": 0.0,
             "fx_loss_total": 0.0,
@@ -95,14 +96,19 @@ class BucketStore:
             # allocate yesterday's daily profit split before reset
             prev = float(self.data.get("daily_profit_usd") or 0)
             if prev > 0:
-                crypto_cut = prev * float(self.data.get("profit_to_crypto_pct") or 0.10)
+                # FX-only: never siphon profit into crypto
+                pct = 0.0
+                if bool(self.data.get("crypto_trading_enabled", False)):
+                    pct = float(self.data.get("profit_to_crypto_pct") or 0.0)
+                crypto_cut = prev * pct
                 fx_keep = prev - crypto_cut
                 self.data["fx_bucket_usd"] = float(self.data["fx_bucket_usd"]) + fx_keep
                 self.data["crypto_hold_usd"] = float(self.data["crypto_hold_usd"]) + crypto_cut
-                self.data.setdefault("pending_crypto_buy_usd", 0.0)
-                self.data["pending_crypto_buy_usd"] = (
-                    float(self.data.get("pending_crypto_buy_usd") or 0) + crypto_cut
-                )
+                if crypto_cut > 0:
+                    self.data.setdefault("pending_crypto_buy_usd", 0.0)
+                    self.data["pending_crypto_buy_usd"] = (
+                        float(self.data.get("pending_crypto_buy_usd") or 0) + crypto_cut
+                    )
             self.data["day_key"] = today
             self.data["daily_profit_usd"] = 0.0
             self.data["daily_fx_pnl"] = 0.0
@@ -114,12 +120,29 @@ class BucketStore:
             self.save()
 
     def sync_to_equity(self, equity: float, *, fx_target: float | None = None) -> dict[str, Any]:
-        """Keep FX at ~$20 (or fx_target), put the rest into crypto hold.
-
-        With ~$26 equity → FX $20 + crypto ~$6. Never allocate more than cash.
-        Preserves PnL counters; only resizes working buckets.
-        """
+        """Allocate working capital. FX-only mode puts 100% into FX bucket."""
         eq = max(0.0, float(equity or 0))
+        crypto_on = bool(self.data.get("crypto_trading_enabled", False))
+        if not crypto_on:
+            self.data["fx_target_usd"] = eq
+            self.data["fx_bucket_usd"] = round(eq, 4)
+            self.data["crypto_hold_usd"] = 0.0
+            self.data["profit_to_crypto_pct"] = 0.0
+            self.data["crypto_trading_enabled"] = False
+            self.data["auto_split_equity"] = True
+            self.data["auto_convert_fx"] = True
+            self.data["fx_instant_tp_pct"] = float(self.data.get("fx_instant_tp_pct") or 0.04)
+            if not self.data.get("fx_pairs"):
+                self.data["fx_pairs"] = [
+                    "USD/CAD",
+                    "EUR/CAD",
+                    "EUR/USD",
+                    "GBP/USD",
+                    "AUD/USD",
+                ]
+            self.save()
+            return {"fx_bucket_usd": eq, "crypto_hold_usd": 0.0, "equity": eq, "crypto_trading_enabled": False}
+
         target = float(fx_target if fx_target is not None else (self.data.get("fx_target_usd") or 20.0))
         if target <= 0:
             target = 20.0
@@ -140,7 +163,7 @@ class BucketStore:
                 "AUD/USD",
             ]
         self.save()
-        return {"fx_bucket_usd": fx, "crypto_hold_usd": crypto, "equity": eq}
+        return {"fx_bucket_usd": fx, "crypto_hold_usd": crypto, "equity": eq, "crypto_trading_enabled": True}
 
     def snapshot(self) -> dict[str, Any]:
         self.ensure_day()

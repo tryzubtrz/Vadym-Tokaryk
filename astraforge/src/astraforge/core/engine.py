@@ -277,6 +277,8 @@ class TradingEngine:
             parts = [
                 f"split FX=${split['fx_bucket_usd']:.2f}/crypto=${split['crypto_hold_usd']:.2f}"
             ]
+            if not bool(self.buckets.data.get("crypto_trading_enabled", False)):
+                parts[0] = f"FX-only ${split['fx_bucket_usd']:.2f}"
             for c in closed:
                 if c.get("ok"):
                     parts.append(f"FX close {c.get('symbol')} pnl={float(c.get('pnl') or 0):+.4f}")
@@ -293,15 +295,18 @@ class TradingEngine:
                     f"AI:{pick.get('action')}:{pick.get('symbol') or '-'} ({pick.get('reason','')[:80]})"
                 )
 
-            # Fierce crypto scalp on leftover bucket (~$6+)
-            try:
-                crypto_parts = await self._run_crypto_bucket_scalp(account, pnl_today)
-                parts.extend(crypto_parts)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("crypto_bucket_scalp_failed", error=str(exc))
-                parts.append(f"crypto_err:{exc}")
+            # Crypto scalp only if explicitly enabled
+            if bool(self.buckets.data.get("crypto_trading_enabled", False)):
+                try:
+                    crypto_parts = await self._run_crypto_bucket_scalp(account, pnl_today)
+                    parts.extend(crypto_parts)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("crypto_bucket_scalp_failed", error=str(exc))
+                    parts.append(f"crypto_err:{exc}")
+            else:
+                parts.append("crypto:OFF")
 
-            self._last_status_summary = " | ".join(parts) or "FX+crypto idle"
+            self._last_status_summary = " | ".join(parts) or "FX idle"
             await self.state.log_decision(
                 {
                     "type": "fx_crypto_tick",
@@ -364,6 +369,21 @@ class TradingEngine:
             pnl_today=pnl_today,
         )
 
+        # FX-only: never open/scale crypto via the general agent path
+        if not bool(self.buckets.data.get("crypto_trading_enabled", False)):
+            fx_bases = {"USD", "EUR", "GBP", "AUD", "CAD"}
+            kept = []
+            for d in batch.decisions:
+                sym = (getattr(d, "symbol", None) or "").upper()
+                base = sym.split("/")[0] if "/" in sym else ""
+                act = getattr(d, "action", None)
+                act_s = (act.value if hasattr(act, "value") else str(act or "")).lower()
+                is_fx = base in fx_bases and ("/" in sym)
+                if act_s in {"open_long", "open_short", "buy", "long", "scale_in"} and not is_fx:
+                    continue
+                kept.append(d)
+            batch.decisions = kept
+
         for decision in batch.decisions:
             result = await self.executor.execute(decision, account)
             results.append(result)
@@ -412,6 +432,8 @@ class TradingEngine:
 
     async def _run_crypto_bucket_scalp(self, account: AccountSnapshot, pnl_today: float) -> list[str]:
         """Aggressive momentum scalp using ONLY the leftover crypto bucket (~$6+)."""
+        if not bool(self.buckets.data.get("crypto_trading_enabled", False)):
+            return ["crypto:OFF"]
         snap = self.buckets.snapshot()
         budget = float(snap.get("crypto_hold_usd") or 0)
         if budget < 1.5:

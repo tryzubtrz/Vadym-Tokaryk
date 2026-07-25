@@ -22,7 +22,7 @@ os.environ.setdefault("TRADING_MODE", "live")
 os.environ.setdefault("LIVE_CONFIRMED", "true")
 os.environ.setdefault(
     "TRADE_SYMBOLS",
-    "USD/CAD,EUR/CAD,EUR/USD,GBP/USD,AUD/USD,SOL/USD,XRP/USD,DOGE/USD",
+    "USD/CAD,EUR/CAD,EUR/USD,GBP/USD,AUD/USD",
 )
 os.environ.setdefault("TRADING_STYLE", "fx_multi_scalp")
 os.environ.setdefault("CANDLE_TIMEFRAME", "5m")
@@ -31,8 +31,9 @@ os.environ.setdefault("MAX_POSITION_PCT", "30")
 os.environ.setdefault("MAX_OPEN_POSITIONS", "10")
 os.environ.setdefault("ZERO_FEE_MODE", "true")
 os.environ.setdefault("MIN_TAKE_PROFIT_PCT", "0.04")
-os.environ.setdefault("FX_BUCKET_USD", "20")
-os.environ.setdefault("CRYPTO_BUCKET_USD", "8")
+os.environ.setdefault("FX_BUCKET_USD", "26.5")
+os.environ.setdefault("CRYPTO_BUCKET_USD", "0")
+os.environ.setdefault("MAX_DRAWDOWN_PCT", "7")
 os.environ.setdefault("DASHBOARD_PASSWORD", "astraforge")
 os.environ.setdefault("DASHBOARD_PORT", "8080")
 os.environ["DATABASE_PATH"] = str((ROOT / "data" / "astraforge_live.db").resolve())
@@ -70,8 +71,9 @@ async def main() -> None:
         max_leverage=1.0,
         zero_fee_mode=os.getenv("ZERO_FEE_MODE", "true").lower() in {"1", "true", "yes"},
         min_take_profit_pct=float(os.getenv("MIN_TAKE_PROFIT_PCT", "0.12")),
-        fx_bucket_usd=float(os.getenv("FX_BUCKET_USD", "20")),
-        crypto_bucket_usd=float(os.getenv("CRYPTO_BUCKET_USD", "0")),  # rest of equity after FX $20
+        fx_bucket_usd=float(os.getenv("FX_BUCKET_USD", "26.5")),
+        crypto_bucket_usd=float(os.getenv("CRYPTO_BUCKET_USD", "0")),
+        max_drawdown_pct=float(os.getenv("MAX_DRAWDOWN_PCT", "7")),
         dashboard_owner_email=os.getenv("DASHBOARD_OWNER_EMAIL", ""),
         database_path=os.environ["DATABASE_PATH"],
         dashboard_host=os.getenv("DASHBOARD_HOST", "0.0.0.0"),
@@ -115,10 +117,39 @@ async def main() -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"startup balance soft-fail: {exc}", flush=True)
 
+    # Force FX-only capital allocation on every start
+    try:
+        engine.buckets.data["crypto_trading_enabled"] = False
+        engine.buckets.data["profit_to_crypto_pct"] = 0.0
+        engine.buckets.data["crypto_hold_usd"] = 0.0
+        engine.buckets.data["pending_crypto_buy_usd"] = 0.0
+        engine.buckets.save()
+    except Exception as exc:  # noqa: BLE001
+        print(f"bucket FX-only soft-fail: {exc}", flush=True)
+
+    # Recalibrate peak after strategy switch (crypto drag must not keep FX paused)
+    try:
+        peak = float(await engine.state.get_kv("peak_equity", 0) or 0)
+        acc = await engine.exchange.get_account_snapshot(peak_equity=peak, force=True)
+        if acc.equity > 0 and (peak <= 0 or (peak - acc.equity) / peak > 0.05):
+            await engine.state.set_kv("peak_equity", acc.equity)
+            print(f"peak_equity recalibrated to {acc.equity:.4f}", flush=True)
+        await engine.breaker.reset(force_daily=True)
+        await engine.state.save_status_fields(trading_enabled=True)
+    except Exception as exc:  # noqa: BLE001
+        print(f"peak recalibrate soft-fail: {exc}", flush=True)
+
     if not await engine.state.get_active_goal():
         await engine.handle_user_text(
-            "FX $20 маленькі плюси + люта крипта на решті ~$6, ціль 1$ на день"
+            "FX-only: всі гроші на валюту, маленькі плюси, ціль 1$ на день. Крипта вимкнена."
         )
+    else:
+        # Refresh goal text so UI/agent don't keep promoting crypto
+        g = await engine.state.get_active_goal()
+        if g and "крипт" in (g.raw_text or "").lower():
+            await engine.handle_user_text(
+                "FX-only: всі гроші на валюту, маленькі плюси, ціль 1$ на день. Крипта вимкнена."
+            )
 
     print("Buckets:", engine.buckets.snapshot(), flush=True)
     print(

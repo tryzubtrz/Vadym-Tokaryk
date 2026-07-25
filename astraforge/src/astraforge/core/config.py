@@ -66,7 +66,7 @@ class Settings(BaseSettings):
 
     # Universe
     trade_symbols: str = (
-        "USD/CAD,EUR/CAD,EUR/USD,GBP/USD,AUD/USD,SOL/USD,XRP/USD,DOGE/USD"
+        "USD/CAD,EUR/CAD,EUR/USD,GBP/USD,AUD/USD"
     )
 
     # Strategy
@@ -77,8 +77,8 @@ class Settings(BaseSettings):
     zero_fee_mode: bool = True
     min_take_profit_pct: float = 0.04  # close tiny green fast — don't wait long
     # FX buckets
-    fx_bucket_usd: float = 20.0
-    crypto_bucket_usd: float = 8.0
+    fx_bucket_usd: float = 26.5
+    crypto_bucket_usd: float = 0.0
     fx_max_slots: int = 10
     fx_target_slot_usd: float = 2.0
     dashboard_owner_email: str = ""
