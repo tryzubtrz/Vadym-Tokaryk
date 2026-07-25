@@ -44,11 +44,14 @@ def _default_state() -> dict[str, Any]:
         "bankroll_usdc": 5.0,
         "stake_usdc": 1.0,
         "max_loss_usdc": 5.0,
+        "max_losses": 5,  # hard stop after 5 losing $1 tickets
         "min_tp_pct": 0.40,  # > measured RT ~0.16%
         "stop_pct": 0.55,
         "max_hold_sec": 3_600,  # 1h
         "cooldown_sec": 600,
         "min_score": 0.48,
+        "base_min_score": 0.48,
+        "learn_score_step": 0.03,
         "leverage": 1,
         "open": None,
         "last_open_at": "",
@@ -62,6 +65,7 @@ def _default_state() -> dict[str, Any]:
         "measured_taker_pct": 0.08,
         "last_signal": {},
         "trade_log": [],
+        "lessons": [],  # fingerprints of losing setups to avoid
         "night_started_at": _utcnow(),
         "updated_at": _utcnow(),
     }
@@ -83,11 +87,15 @@ def load_state() -> dict[str, Any]:
     base["bankroll_usdc"] = min(max(float(base.get("bankroll_usdc") or 5.0), 1.0), 5.0)
     base["stake_usdc"] = min(max(float(base.get("stake_usdc") or 1.0), 0.5), 1.0)
     base["max_loss_usdc"] = min(float(base.get("max_loss_usdc") or 5.0), 5.0)
+    base["max_losses"] = int(min(max(int(base.get("max_losses") or 5), 1), 5))
     base["min_tp_pct"] = max(float(base.get("min_tp_pct") or 0.40), 0.30)
-    base["min_score"] = min(max(float(base.get("min_score") or 0.48), 0.35), 0.70)
+    base["base_min_score"] = min(max(float(base.get("base_min_score") or 0.48), 0.35), 0.70)
+    base["min_score"] = min(max(float(base.get("min_score") or base["base_min_score"]), 0.35), 0.70)
     base["cooldown_sec"] = min(max(float(base.get("cooldown_sec") or 600), 300), 3600)
     if not isinstance(base.get("trade_log"), list):
         base["trade_log"] = []
+    if not isinstance(base.get("lessons"), list):
+        base["lessons"] = []
     return base
 
 
@@ -104,6 +112,7 @@ def write_morning_report(state: dict[str, Any], extra: str = "") -> None:
     left = bank + realized
     open_pos = state.get("open")
     sig = state.get("last_signal") or {}
+    lessons = state.get("lessons") or []
     lines = [
         "# Ранковий будок (MEXC micro AI)",
         "",
@@ -112,7 +121,8 @@ def write_morning_report(state: dict[str, Any], extra: str = "") -> None:
         f"- Символ: `{state.get('symbol')}`",
         f"- Рукав: **{left:.2f} / {bank:.0f} USDC**",
         f"- Realized PnL: **{realized:+.4f} USDC**",
-        f"- Угоди: **{state.get('trades', 0)}** | W/L: **{state.get('wins', 0)}/{state.get('losses', 0)}**",
+        f"- Угоди: **{state.get('trades', 0)}** | W/L: **{state.get('wins', 0)}/{state.get('losses', 0)}** "
+        f"(стоп після **{state.get('max_losses', 5)}** програшів)",
         f"- Stopped: `{state.get('stopped')}` {(state.get('stop_reason') or '')}".rstrip(),
         f"- Відкрита позиція: {'так' if open_pos else 'ні'}",
     ]
@@ -125,9 +135,12 @@ def write_morning_report(state: dict[str, Any], extra: str = "") -> None:
         [
             f"- Останній score: `{sig.get('score')}` (поріг `{state.get('min_score')}`) "
             f"rsi1={sig.get('rsi1')} rsi5={sig.get('rsi5')} range={sig.get('range_pos')}",
+            f"- Уроків з помилок: **{len(lessons)}**",
             "",
             "## Правила",
-            "- ~$1 / 1x / long-only / TP≥0.40% / SL−0.55% / стоп рукава −$5",
+            "- ~$1 / 1x / long-only / TP≥0.40% / SL−0.55%",
+            "- Макс **5 програшів** по ~$1, учиться на помилках (піднімає поріг score)",
+            "- Жорсткий стоп рукава −$5",
             "",
         ]
     )
@@ -135,6 +148,11 @@ def write_morning_report(state: dict[str, Any], extra: str = "") -> None:
     if hist:
         lines.append("## Угоди за ніч")
         for row in hist[-30:]:
+            lines.append(f"- {row}")
+        lines.append("")
+    if lessons:
+        lines.append("## Уроки (уникати схожих сетапів)")
+        for row in lessons[-10:]:
             lines.append(f"- {row}")
         lines.append("")
     if extra:
@@ -228,7 +246,15 @@ class MexcMicroAI:
             return f"STOPPED: {self.state.get('stop_reason') or 'halted'}"
         left = self.sleeve_left()
         max_loss = float(self.state.get("max_loss_usdc") or 5.0)
+        max_losses = int(self.state.get("max_losses") or 5)
         realized = float(self.state.get("realized_pnl_usdc") or 0.0)
+        losses = int(self.state.get("losses") or 0)
+        if losses >= max_losses:
+            self.state["stopped"] = True
+            self.state["stop_reason"] = f"hit {max_losses} losses (learn-stop) realized={realized:+.3f}"
+            self.state["enabled"] = False
+            save_state(self.state)
+            return f"STOPPED: {self.state['stop_reason']}"
         if realized <= -max_loss or left <= 0.05:
             self.state["stopped"] = True
             self.state["stop_reason"] = f"bankroll exhausted left={left:.3f} realized={realized:+.3f}"
@@ -238,6 +264,41 @@ class MexcMicroAI:
         if not self.state.get("enabled", True):
             return "disabled"
         return None
+
+    def _lesson_fingerprint(self, sig: dict[str, Any] | None) -> str:
+        sig = sig or {}
+        rsi5 = float(sig.get("rsi5") or 50)
+        rp = float(sig.get("range_pos") or 0.5)
+        rsi_band = "os" if rsi5 < 35 else "mid" if rsi5 < 55 else "ob" if rsi5 < 70 else "xob"
+        range_band = "low" if rp < 0.35 else "mid" if rp < 0.65 else "high"
+        return f"rsi:{rsi_band}|range:{range_band}"
+
+    def _learn_from_trade(self, realized: float, action: str) -> None:
+        """After losses: raise bar + remember bad setup. After wins: ease slightly."""
+        step = float(self.state.get("learn_score_step") or 0.03)
+        base = float(self.state.get("base_min_score") or 0.48)
+        cur = float(self.state.get("min_score") or base)
+        prev = self.state.get("open") or {}
+        # reconstruct approx signal from open score / last_signal
+        sig = dict(self.state.get("last_signal") or {})
+        if realized < 0:
+            cur = min(0.70, cur + step)
+            fp = self._lesson_fingerprint(sig)
+            lessons = list(self.state.get("lessons") or [])
+            note = (
+                f"{_utcnow()} LOSS {action} fp={fp} score={prev.get('score')} "
+                f"pnl={realized:+.4f} -> min_score={cur:.2f}"
+            )
+            lessons.append(note)
+            self.state["lessons"] = lessons[-30:]
+            # keep unique fingerprints list in state
+            fps = list(self.state.get("bad_fingerprints") or [])
+            if fp not in fps:
+                fps.append(fp)
+            self.state["bad_fingerprints"] = fps[-12:]
+        else:
+            cur = max(base, cur - step * 0.5)
+        self.state["min_score"] = round(cur, 3)
 
     async def free_margin(self) -> float:
         try:
@@ -361,6 +422,14 @@ class MexcMicroAI:
 
         # clamp
         score = max(-1.0, min(1.0, score))
+        # learn: penalize fingerprints that already lost tonight
+        fp = self._lesson_fingerprint(
+            {"rsi5": rsi5, "range_pos": range_pos}
+        )
+        bad = set(self.state.get("bad_fingerprints") or [])
+        if fp in bad:
+            score -= 0.25
+            parts["lesson_penalty"] = -0.25
         min_score = float(self.state.get("min_score") or 0.48)
         side = None
         if score >= min_score:
@@ -476,15 +545,18 @@ class MexcMicroAI:
         else:
             self.state["losses"] = int(self.state.get("losses") or 0) + 1
         prev = self.state.get("open") or {}
+        self._learn_from_trade(realized, action)
         log = list(self.state.get("trade_log") or [])
         log.append(
             f"{_utcnow()} {action} entry={prev.get('entry')} pnl={realized:+.4f} "
-            f"score={prev.get('score')} sleeve={self.sleeve_left():.2f}"
+            f"score={prev.get('score')} losses={self.state.get('losses')}/"
+            f"{self.state.get('max_losses', 5)} min_score={self.state.get('min_score')} "
+            f"sleeve={self.sleeve_left():.2f}"
         )
         self.state["trade_log"] = log[-50:]
         self.state["open"] = None
         self.state["last_close_at"] = _utcnow()
-        # stop after bankroll gone
+        # stop after bankroll gone / 5 losses
         self._halt_if_needed()
         save_state(self.state)
 
