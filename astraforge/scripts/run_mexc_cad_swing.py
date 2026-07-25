@@ -407,6 +407,8 @@ class MexcCadSwing:
         )
 
     async def tick(self) -> str:
+        # Re-sync each loop: VM clock jumps invalidate a stale timeDifference (MEXC 602).
+        await self._sync_clock()
         free = await self.free_margin()
         m = await self.mark()
         managed = await self.manage()
