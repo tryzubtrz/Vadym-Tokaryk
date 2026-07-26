@@ -16,12 +16,10 @@ abstract final class AppTheme {
       ),
       scaffoldBackgroundColor: AppColors.paper,
     );
-
     final text = GoogleFonts.nunitoTextTheme(base.textTheme).apply(
       bodyColor: AppColors.ink,
       displayColor: AppColors.ink,
     );
-
     return base.copyWith(
       textTheme: text,
       appBarTheme: AppBarTheme(
@@ -36,30 +34,22 @@ abstract final class AppTheme {
           backgroundColor: AppColors.coral,
           foregroundColor: Colors.white,
           elevation: 4,
-          shadowColor: AppColors.coral.withValues(alpha: 0.35),
           padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(28),
           ),
-          textStyle: const TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 16,
-          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
         ),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: AppColors.mint,
-        foregroundColor: Colors.white,
-        shape: CircleBorder(),
-        elevation: 6,
-      ),
-      cardTheme: CardThemeData(
-        color: Colors.white,
-        elevation: 3,
-        shadowColor: Colors.black26,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+          borderSide: BorderSide.none,
         ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }
