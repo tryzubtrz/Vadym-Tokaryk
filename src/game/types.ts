@@ -1,5 +1,4 @@
 export type ScreenId = 'menu' | 'loadout' | 'flight' | 'results'
-
 export type Role = 'pilot' | 'cabin'
 
 export interface PassengerCard {
@@ -10,6 +9,7 @@ export interface PassengerCard {
   hunger: number
   chaos: number
   blurb: string
+  color: string
 }
 
 export interface CargoCard {
@@ -19,41 +19,12 @@ export interface CargoCard {
   weight: number
   volatility: number
   blurb: string
+  color: string
 }
 
 export interface Loadout {
   passengers: PassengerCard[]
   cargo: CargoCard[]
-}
-
-export interface CabinEntity {
-  id: string
-  kind: 'passenger' | 'cargo' | 'cart' | 'hazard'
-  label: string
-  x: number
-  y: number
-  vx: number
-  vy: number
-  radius: number
-  mood: number
-  secured: boolean
-  needsService: boolean
-  color: string
-}
-
-export interface FlightStats {
-  altitude: number
-  pitch: number
-  roll: number
-  speed: number
-  fuel: number
-  integrity: number
-  reputation: number
-  cashEarned: number
-  timeLeft: number
-  duration: number
-  turbulence: number
-  warnings: string[]
 }
 
 export interface FlightResult {
@@ -68,11 +39,19 @@ export interface FlightResult {
   summary: string
 }
 
-export interface TouchState {
-  active: boolean
-  x: number
-  y: number
-  startX: number
-  startY: number
-  id: number | null
+export interface HudState {
+  altitude: number
+  speed: number
+  fuel: number
+  integrity: number
+  reputation: number
+  cash: number
+  timeLeft: number
+  duration: number
+  turbulence: number
+  pitch: number
+  roll: number
+  role: Role
+  warning: string
+  prompt: string
 }
