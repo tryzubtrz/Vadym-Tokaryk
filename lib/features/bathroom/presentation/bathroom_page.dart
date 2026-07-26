@@ -110,6 +110,7 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
               onTap: () async {
                 setState(() => _washing = true);
                 await ref.read(characterProvider.notifier).wash(18);
+                await ref.read(growthDayProvider.notifier).tryAutoCare();
                 await _showMood('Душ!', pose: CharacterPose.happy);
               },
             ),
@@ -118,6 +119,7 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
               color: const Color(0xFF66BB6A),
               onTap: () async {
                 await ref.read(characterProvider.notifier).brushTeeth();
+                await ref.read(growthDayProvider.notifier).tryAutoCare();
                 await _showMood('Зубки!', pose: CharacterPose.happy);
               },
             ),
@@ -134,6 +136,7 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
               color: const Color(0xFF8D6E63),
               onTap: () async {
                 await ref.read(characterProvider.notifier).toilet();
+                await ref.read(growthDayProvider.notifier).tryAutoCare();
                 await _showMood('Фух!', pose: CharacterPose.sit);
                 ref
                     .read(characterAnimationProvider.notifier)

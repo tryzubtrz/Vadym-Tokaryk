@@ -128,6 +128,7 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
                     await ref
                         .read(characterProvider.notifier)
                         .sleep(_lightsOff);
+                    await ref.read(growthDayProvider.notifier).tryAutoCare();
                     ref
                         .read(characterAnimationProvider.notifier)
                         .setPose(CharacterAnimPose.sleep);

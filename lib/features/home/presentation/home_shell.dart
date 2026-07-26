@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../features/growth/widgets/growth_sheet.dart';
 import '../../../shared/providers/app_providers.dart';
 import '../widgets/tom_needs_pips.dart';
 import '../widgets/tom_style_ui.dart';
@@ -53,9 +54,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           children: [
             Row(
               children: [
-                LevelBadge(
-                  level: character.age,
-                  progress: character.yearProgress,
+                GestureDetector(
+                  onTap: () => showGrowthSheet(context),
+                  child: LevelBadge(
+                    level: character.age,
+                    progress: character.yearProgress,
+                  ),
                 )
                     .animate()
                     .fadeIn(duration: 420.ms)

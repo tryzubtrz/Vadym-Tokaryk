@@ -33,8 +33,10 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
         .setPose(CharacterAnimPose.eat);
     try {
       await ref.read(characterProvider.notifier).feed(food);
+      final careMsg =
+          await ref.read(growthDayProvider.notifier).tryAutoCare();
       if (!mounted) return;
-      setState(() => _reaction = 'Ням-ням!');
+      setState(() => _reaction = careMsg ?? 'Ням-ням!');
     } catch (e) {
       if (!mounted) return;
       setState(() => _reaction = '$e');

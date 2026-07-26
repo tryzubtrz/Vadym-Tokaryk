@@ -195,7 +195,7 @@ class GrowthService {
       leveledUp: leveled,
       newAge: leveled ? age : null,
       stageChanged: stageChanged,
-      message: leveled ? '🎉 ${c.name} тепер має $age років!' : null,
+      message: leveled ? '${c.name} тепер має $age років!' : null,
     );
   }
 

@@ -12,6 +12,7 @@ import '../../domain/services/character_service.dart';
 import '../../domain/services/chat_service.dart';
 import '../../domain/services/friends_service.dart';
 import '../../domain/services/growth_service.dart';
+import '../../features/growth/domain/care_slot_clock.dart';
 
 /// Bootstrapping flag.
 final appReadyProvider = StateProvider<bool>((ref) => false);
@@ -123,6 +124,13 @@ class GrowthDayNotifier extends StateNotifier<GrowthState> {
     await refresh();
     return ev.message ??
         (ev.xpGained > 0 ? '+${ev.xpGained} XP, +${ev.coinsGained} коїнів' : null);
+  }
+
+  /// Awards the time-of-day care slot once (called after real care actions).
+  Future<String?> tryAutoCare([DateTime? now]) async {
+    final slot = careSlotForTime(now ?? DateTime.now());
+    if (state.careDone(slot)) return null;
+    return completeCare(slot);
   }
 
   Future<String?> answerQuestion(String answer) async {
