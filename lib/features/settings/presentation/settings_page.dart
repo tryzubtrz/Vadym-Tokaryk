@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/storage/hive_boxes.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../auth/presentation/onboarding_flow.dart';
+import '../../auth/providers/onboarding_providers.dart';
 import '../../character/domain/enums.dart';
 import '../../character/providers/app_providers.dart';
 
@@ -97,6 +98,10 @@ class SettingsPage extends ConsumerWidget {
               await HiveBoxes.characterBox.clear();
               await HiveBoxes.fridgeBox.clear();
               await HiveBoxes.chatBox.clear();
+              ref.read(onboardingStepProvider.notifier).state = 0;
+              ref.read(onboardingDraftProvider.notifier).reset();
+              ref.invalidate(sessionProvider);
+              ref.invalidate(characterProvider);
               if (context.mounted) context.go('/onboarding');
             },
           ),

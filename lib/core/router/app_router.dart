@@ -20,8 +20,6 @@ import '../../features/character/providers/app_providers.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
 
-/// Stable router — do NOT watch session/character here (that recreates GoRouter
-/// and resets onboarding UI back to step 0).
 final appRouterProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefresh(ref);
   ref.onDispose(refresh.dispose);
@@ -42,10 +40,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/splash', builder: (context, state) => const SplashPage()),
+      GoRoute(
+        path: '/splash',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: SplashPage(),
+        ),
+      ),
       GoRoute(
         path: '/onboarding',
-        builder: (context, state) => const OnboardingFlow(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          // Stable key keeps State across redirect refreshes.
+          key: ValueKey('onboarding'),
+          child: OnboardingFlow(),
+        ),
       ),
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
       GoRoute(path: '/kitchen', builder: (context, state) => const KitchenPage()),
@@ -77,19 +84,38 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   );
 });
 
+/// Refresh ONLY when onboarding completion / character presence changes.
+/// Intermediate session edits (language, email) must not remount routes.
 class _RouterRefresh extends ChangeNotifier {
   _RouterRefresh(this.ref) {
-    _sessionSub = ref.listen(sessionProvider, (previous, next) {
-      notifyListeners();
+    var lastDone = _doneFlag();
+    _sessionSub = ref.listen(sessionProvider, (prev, next) {
+      final now = next.onboardingComplete;
+      final was = prev?.onboardingComplete ?? false;
+      if (now != was || _doneFlag() != lastDone) {
+        lastDone = _doneFlag();
+        notifyListeners();
+      }
     });
-    _characterSub = ref.listen(characterProvider, (previous, next) {
-      notifyListeners();
+    _characterSub = ref.listen(characterProvider, (prev, next) {
+      final had = prev != null;
+      final has = next != null;
+      if (had != has) {
+        lastDone = _doneFlag();
+        notifyListeners();
+      }
     });
   }
 
   final Ref ref;
   late final ProviderSubscription<dynamic> _sessionSub;
   late final ProviderSubscription<dynamic> _characterSub;
+
+  bool _doneFlag() {
+    final s = ref.read(sessionProvider);
+    final c = ref.read(characterProvider);
+    return s.onboardingComplete && c != null;
+  }
 
   @override
   void dispose() {
