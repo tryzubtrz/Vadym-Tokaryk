@@ -278,48 +278,77 @@ class TomActionButton extends StatelessWidget {
 }
 
 class LevelBadge extends StatelessWidget {
-  const LevelBadge({super.key, required this.level, this.progress = 0});
+  const LevelBadge({
+    super.key,
+    required this.level,
+    this.progress = 0,
+    this.subtitle,
+  });
   final int level;
   final double progress;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 58,
-      height: 58,
+      width: 64,
+      height: 64,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          CircularProgressIndicator(
-            value: progress.clamp(0.05, 1),
-            strokeWidth: 4,
-            backgroundColor: Colors.white24,
-            valueColor: const AlwaysStoppedAnimation(Color(0xFFE8B0FF)),
+          SizedBox(
+            width: 64,
+            height: 64,
+            child: CircularProgressIndicator(
+              value: progress.clamp(0.04, 1),
+              strokeWidth: 4.5,
+              backgroundColor: Colors.white.withValues(alpha: 0.28),
+              valueColor: const AlwaysStoppedAnimation(AppColors.levelRing),
+              strokeCap: StrokeCap.round,
+            ),
           ),
           Container(
-            width: 46,
-            height: 46,
+            width: 50,
+            height: 50,
             alignment: Alignment.center,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [Color(0xFFC85CFF), Color(0xFF7B2CBF)],
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFF8A65), AppColors.brandCoral],
               ),
+              border: Border.all(color: Colors.white, width: 2),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black38,
-                  blurRadius: 6,
-                  offset: Offset(0, 2),
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
-            child: Text(
-              '$level',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 18,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$level',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                    height: 1,
+                  ),
+                ),
+                Text(
+                  subtitle ?? 'років',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 8,
+                    height: 1.1,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -329,44 +358,67 @@ class LevelBadge extends StatelessWidget {
 }
 
 class TomCurrencyBar extends StatelessWidget {
-  const TomCurrencyBar({super.key, required this.coins, required this.gems});
+  const TomCurrencyBar({
+    super.key,
+    required this.coins,
+    required this.gems,
+    this.onAddCoins,
+    this.onAddGems,
+  });
   final int coins;
   final int gems;
+  final VoidCallback? onAddCoins;
+  final VoidCallback? onAddGems;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _chip(const Color(0xFF5BC0EB), Icons.diamond, gems),
+        _chip(
+          AppColors.donateCoins,
+          Icons.diamond_rounded,
+          gems,
+          onAdd: onAddGems,
+        ),
         const SizedBox(width: 8),
-        _chip(const Color(0xFFF5C542), Icons.monetization_on, coins),
+        _chip(
+          AppColors.coins,
+          Icons.monetization_on_rounded,
+          coins,
+          onAdd: onAddCoins,
+        ),
       ],
     );
   }
 
-  Widget _chip(Color c, IconData icon, int value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.add_circle, color: Colors.lightGreenAccent, size: 16),
-          const SizedBox(width: 4),
-          Icon(icon, color: c, size: 18),
-          const SizedBox(width: 4),
-          Text(
-            '$value',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 14,
-            ),
+  Widget _chip(Color c, IconData icon, int value, {VoidCallback? onAdd}) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.45),
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        onTap: onAdd,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          child: Row(
+            children: [
+              Icon(Icons.add_circle_rounded,
+                  color: Colors.lightGreenAccent.shade400, size: 16),
+              const SizedBox(width: 4),
+              Icon(icon, color: c, size: 18),
+              const SizedBox(width: 4),
+              Text(
+                '$value',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

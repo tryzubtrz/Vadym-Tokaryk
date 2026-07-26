@@ -54,9 +54,9 @@ lib/
 
 ## Build order (strict)
 
-1. **Structure** ← current
-2. Character + Rive
-3. Home screen (Tom UX)
+1. **Structure** ✅
+2. **Character + Rive** ✅ (fallback until `.riv` art)
+3. **Home screen (Tom UX)** ← current
 4. Kitchen / Bath / Bedroom
 5. Growth XP
 6. Minigames

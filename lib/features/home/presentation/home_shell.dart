@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/providers/app_providers.dart';
+import '../widgets/tom_needs_pips.dart';
 import '../widgets/tom_style_ui.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
@@ -40,34 +42,53 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       kind: RoomSceneKind.living,
       character: character,
       pose: _pose,
-      // Touch reactions + mood handled by RiveCharacterView / animation provider.
+      characterSizeFactor: 0.68,
+      characterAlignment: const Alignment(0, 0.32),
       onCharacterTap: () => setState(() => _pose = CharacterPose.react),
       onStroke: () => setState(() => _pose = CharacterPose.happy),
       topBar: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 LevelBadge(
                   level: character.age,
                   progress: character.yearProgress,
-                ),
+                )
+                    .animate()
+                    .fadeIn(duration: 420.ms)
+                    .scale(
+                      begin: const Offset(0.85, 0.85),
+                      curve: Curves.easeOutBack,
+                    ),
                 const SizedBox(width: 8),
                 _hudIcon(Icons.campaign_rounded, () => context.push('/news'),
-                    alert: true),
+                        alert: true)
+                    .animate()
+                    .fadeIn(delay: 80.ms, duration: 360.ms),
                 const Spacer(),
                 TomCurrencyBar(
                   coins: character.coins,
                   gems: character.donateCoins,
-                ),
+                  onAddCoins: () => context.push('/economy'),
+                  onAddGems: () => context.push('/economy'),
+                )
+                    .animate()
+                    .fadeIn(delay: 100.ms, duration: 400.ms)
+                    .slideX(begin: 0.08, curve: Curves.easeOutCubic),
                 const SizedBox(width: 6),
                 _hudIcon(
                   Icons.settings_rounded,
                   () => context.push('/settings'),
-                ),
+                ).animate().fadeIn(delay: 140.ms, duration: 360.ms),
               ],
             ),
+            const SizedBox(height: 8),
+            TomNeedsPips(needs: character.needs)
+                .animate()
+                .fadeIn(delay: 220.ms, duration: 320.ms),
             if (downloadLabel != null) ...[
               const SizedBox(height: 8),
               Container(
@@ -106,7 +127,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             onTap: () => context.push('/wardrobe'),
           ),
         ],
-      ),
+      )
+          .animate()
+          .fadeIn(delay: 180.ms, duration: 400.ms)
+          .slideX(begin: 0.25, curve: Curves.easeOutCubic),
       overlay: growth.dailyQuestionAsked &&
               !growth.dailyQuestionAnswered &&
               growth.dailyQuestionText != null
@@ -125,7 +149,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                         .showSnackBar(SnackBar(content: Text(msg)));
                   }
                 },
-              ),
+              ).animate().fadeIn(duration: 280.ms).slideY(begin: 0.12),
             )
           : null,
       bottomBar: Padding(
@@ -189,7 +213,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               },
             ),
           ],
-        ),
+        )
+            .animate()
+            .fadeIn(delay: 160.ms, duration: 420.ms)
+            .slideY(begin: 0.35, curve: Curves.easeOutCubic),
       ),
     );
   }
@@ -259,7 +286,7 @@ class _DailyBubbleState extends State<_DailyBubble> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              '❓ ${widget.question}',
+              widget.question,
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             Row(
