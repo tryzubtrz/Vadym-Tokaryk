@@ -143,6 +143,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               onPressed: () => context.go('/register'),
               child: const Text('Немає акаунта? Зареєструватися'),
             ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => context.go('/home'),
+              child: const Text('▶ Спробувати без реєстрації'),
+            ),
           ],
         ),
       ),

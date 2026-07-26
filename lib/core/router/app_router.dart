@@ -32,7 +32,8 @@ final _rootKey = GlobalKey<NavigatorState>();
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootKey,
-    initialLocation: '/',
+    // Demo preview opens straight into the game.
+    initialLocation: '/home',
     redirect: (context, state) {
       final auth = ref.read(authServiceProvider);
       final character = ref.read(characterServiceProvider).load();
@@ -47,25 +48,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         '/name',
       };
 
-      if (!auth.onboardingComplete || character == null) {
-        if (onboardingRoutes.contains(loc)) return null;
-        if (!auth.isLoggedIn) return '/language';
-        final user = auth.currentUser();
-        if (user == null) return '/language';
-        if (user.realAge < 12) return '/age';
-        if (character == null) {
-          if (loc == '/character' || loc == '/name') return null;
-          return '/character';
-        }
-        return '/language';
+      // If demo/character already ready — never force registration.
+      if (auth.onboardingComplete && character != null) {
+        if (onboardingRoutes.contains(loc)) return '/home';
+        return null;
       }
-      if (onboardingRoutes.contains(loc)) {
-        return '/home';
+
+      if (onboardingRoutes.contains(loc)) return null;
+      if (!auth.isLoggedIn) return '/language';
+      final user = auth.currentUser();
+      if (user == null) return '/language';
+      if (user.realAge < 12) return '/age';
+      if (character == null) {
+        if (loc == '/character' || loc == '/name') return null;
+        return '/character';
       }
-      return null;
+      return '/home';
     },
     routes: [
-      GoRoute(path: '/', builder: (_, __) => const LanguagePage()),
+      GoRoute(path: '/', redirect: (_, __) => '/home'),
       GoRoute(path: '/language', builder: (_, __) => const LanguagePage()),
       GoRoute(path: '/login', builder: (_, __) => const LoginPage()),
       GoRoute(path: '/register', builder: (_, __) => const RegisterPage()),

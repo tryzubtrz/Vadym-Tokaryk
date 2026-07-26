@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app.dart';
 import 'data/local/hive_boxes.dart';
+import 'domain/services/demo_bootstrap.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -12,5 +13,15 @@ Future<void> main() async {
     DeviceOrientation.portraitDown,
   ]);
   await HiveBoxes.init();
-  runApp(const ProviderScope(child: MyMasyaApp()));
+
+  // Demo / phone preview: skip registration and land on home.
+  final container = ProviderContainer();
+  await container.read(demoBootstrapProvider).ensureDemoReady();
+
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const MyMasyaApp(),
+    ),
+  );
 }
