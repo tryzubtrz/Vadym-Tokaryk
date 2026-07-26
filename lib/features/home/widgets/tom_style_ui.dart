@@ -1,11 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/character_model.dart';
-import '../../../data/models/enums.dart';
+import '../../character/domain/character_animation_state.dart';
+import '../../character/providers/character_animation_provider.dart';
+import '../../character/widgets/character_stage_view.dart';
+import '../../character/widgets/rive_character_view.dart';
 
 enum CharacterPose { idle, happy, eat, sleep, sit, wave, react }
+
+extension CharacterPoseX on CharacterPose {
+  CharacterAnimPose get animPose => switch (this) {
+        CharacterPose.happy => CharacterAnimPose.happy,
+        CharacterPose.eat => CharacterAnimPose.eat,
+        CharacterPose.sleep => CharacterAnimPose.sleep,
+        CharacterPose.sit => CharacterAnimPose.sit,
+        CharacterPose.wave => CharacterAnimPose.wave,
+        CharacterPose.react => CharacterAnimPose.react,
+        CharacterPose.idle => CharacterAnimPose.idle,
+      };
+}
 
 enum RoomSceneKind {
   living,
@@ -26,9 +41,9 @@ String roomBackgroundAsset(RoomSceneKind kind) => switch (kind) {
 
 /// Talking Tom format:
 /// 1) empty room background
-/// 2) living character layered on top
+/// 2) living character layered on top (Rive or animated fallback)
 /// 3) HUD / circular actions as overlay
-class TomRoomStage extends StatelessWidget {
+class TomRoomStage extends ConsumerWidget {
   const TomRoomStage({
     super.key,
     required this.kind,
@@ -43,7 +58,7 @@ class TomRoomStage extends StatelessWidget {
     this.sideBar,
     this.overlay,
     this.characterAlignment = const Alignment(0, 0.35),
-    this.characterSizeFactor = 0.78,
+    this.characterSizeFactor = 0.68,
   });
 
   final RoomSceneKind kind;
@@ -61,37 +76,28 @@ class TomRoomStage extends StatelessWidget {
   final double characterSizeFactor;
 
   @override
-  Widget build(BuildContext context) {
-    final w = MediaQuery.of(context).size.width;
-
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 1. Room only
           Image.asset(
             roomBackgroundAsset(kind),
             fit: BoxFit.cover,
             alignment: Alignment.center,
             filterQuality: FilterQuality.high,
           ),
-
-          // 2. Living character (not baked into room)
-          Align(
+          CharacterStageView(
+            character: character,
+            widthFactor: characterSizeFactor,
             alignment: characterAlignment,
-            child: CharacterAnimator(
-              character: character,
-              size: w * characterSizeFactor,
-              pose: pose,
-              onTap: onCharacterTap,
-              onStroke: onStroke,
-              onPoke: onPoke,
-              onShake: onShake,
-            ),
+            pose: pose.animPose,
+            onTap: onCharacterTap,
+            onStroke: onStroke,
+            onPoke: onPoke,
+            onShake: onShake,
           ),
-
-          // Readability vignette
           IgnorePointer(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -109,9 +115,7 @@ class TomRoomStage extends StatelessWidget {
               ),
             ),
           ),
-
-          if (overlay != null) overlay!,
-
+          ?overlay,
           if (topBar != null)
             Positioned(
               left: 0,
@@ -119,14 +123,12 @@ class TomRoomStage extends StatelessWidget {
               top: 0,
               child: SafeArea(bottom: false, child: topBar!),
             ),
-
           if (sideBar != null)
             Positioned(
               right: 10,
               top: MediaQuery.of(context).size.height * 0.26,
               child: sideBar!,
             ),
-
           if (bottomBar != null)
             Positioned(
               left: 0,
@@ -140,14 +142,13 @@ class TomRoomStage extends StatelessWidget {
   }
 }
 
-/// Cutout 3D character with continuous idle motion + pose swaps.
-class CharacterAnimator extends StatefulWidget {
+/// Compatibility wrapper — prefer [RiveCharacterView] / [CharacterStageView].
+class CharacterAnimator extends ConsumerStatefulWidget {
   const CharacterAnimator({
     super.key,
     required this.character,
     this.size = 320,
     this.talking = false,
-    this.reaction,
     this.pose = CharacterPose.idle,
     this.onTap,
     this.onStroke,
@@ -158,7 +159,6 @@ class CharacterAnimator extends StatefulWidget {
   final CharacterModel character;
   final double size;
   final bool talking;
-  final InteractionGesture? reaction;
   final CharacterPose pose;
   final VoidCallback? onTap;
   final VoidCallback? onStroke;
@@ -166,118 +166,46 @@ class CharacterAnimator extends StatefulWidget {
   final VoidCallback? onShake;
 
   @override
-  State<CharacterAnimator> createState() => _CharacterAnimatorState();
+  ConsumerState<CharacterAnimator> createState() => _CharacterAnimatorState();
 }
 
-class _CharacterAnimatorState extends State<CharacterAnimator>
-    with TickerProviderStateMixin {
-  late final AnimationController _breathe;
-  late final AnimationController _sway;
-  CharacterPose _flashPose = CharacterPose.idle;
-  bool _flashing = false;
-  Offset _drag = Offset.zero;
-
+class _CharacterAnimatorState extends ConsumerState<CharacterAnimator> {
   @override
   void initState() {
     super.initState();
-    _breathe = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-    _sway = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2600),
-    )..repeat(reverse: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
   }
 
   @override
-  void dispose() {
-    _breathe.dispose();
-    _sway.dispose();
-    super.dispose();
+  void didUpdateWidget(covariant CharacterAnimator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.talking != widget.talking ||
+        oldWidget.pose != widget.pose ||
+        oldWidget.character.isSleeping != widget.character.isSleeping) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
+    }
   }
 
-  CharacterPose get _effectivePose {
-    if (_flashing) return _flashPose;
-    if (widget.character.isSleeping) return CharacterPose.sleep;
-    return widget.pose;
-  }
-
-  String _assetFor(CharacterPose pose) {
-    final girl = widget.character.type == CharacterType.masya;
-    if (!girl) return 'assets/images/character/syryk_idle_cut.png';
-    return switch (pose) {
-      CharacterPose.happy ||
-      CharacterPose.wave ||
-      CharacterPose.react =>
-        'assets/images/character/masya_react_cut.png',
-      CharacterPose.eat => 'assets/images/character/masya_eat_cut.png',
-      CharacterPose.sleep => 'assets/images/character/masya_sleep_cut.png',
-      CharacterPose.sit => 'assets/images/character/masya_stand_cut.png',
-      _ => 'assets/images/character/masya_stand_cut.png',
-    };
-  }
-
-  Future<void> _flash(CharacterPose pose) async {
-    setState(() {
-      _flashing = true;
-      _flashPose = pose;
-    });
-    await Future<void>.delayed(const Duration(milliseconds: 700));
-    if (mounted) setState(() => _flashing = false);
+  void _sync() {
+    if (!mounted) return;
+    final notifier = ref.read(characterAnimationProvider.notifier);
+    notifier.setTalking(widget.talking);
+    if (widget.character.isSleeping) {
+      notifier.setPose(CharacterAnimPose.sleep);
+    } else {
+      notifier.setPose(widget.pose.animPose);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final pose = _effectivePose;
-    final asset = _assetFor(pose);
-
-    return GestureDetector(
-      onTap: () {
-        widget.onTap?.call();
-        _flash(CharacterPose.react);
-      },
-      onLongPress: () {
-        widget.onStroke?.call();
-        _flash(CharacterPose.happy);
-      },
-      onDoubleTap: () {
-        widget.onPoke?.call();
-        _flash(CharacterPose.react);
-      },
-      onPanUpdate: (d) {
-        _drag += d.delta;
-        if (_drag.distance > 42) {
-          widget.onShake?.call();
-          _drag = Offset.zero;
-          _flash(CharacterPose.react);
-        }
-      },
-      child: AnimatedBuilder(
-        animation: Listenable.merge([_breathe, _sway]),
-        builder: (_, __) {
-          final breathe = 1 + _breathe.value * 0.035;
-          final bob = (_breathe.value - 0.5) * 10;
-          final sway = (_sway.value - 0.5) * 6;
-          return Transform.translate(
-            offset: Offset(sway, bob),
-            child: Transform.scale(
-              scale: breathe,
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 180),
-                child: Image.asset(
-                  asset,
-                  key: ValueKey(asset),
-                  width: widget.size,
-                  height: widget.size * 1.05,
-                  fit: BoxFit.contain,
-                  filterQuality: FilterQuality.high,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
+    return RiveCharacterView(
+      character: widget.character,
+      size: widget.size,
+      onTap: widget.onTap,
+      onStroke: widget.onStroke,
+      onPoke: widget.onPoke,
+      onShake: widget.onShake,
     );
   }
 }
@@ -501,7 +429,7 @@ class RoomSceneBackground extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         Image.asset(roomBackgroundAsset(kind), fit: BoxFit.cover),
-        if (child != null) child!,
+        ?child,
       ],
     );
   }

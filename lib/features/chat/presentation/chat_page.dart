@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/chat_message.dart';
-import '../../../data/models/enums.dart';
 import '../../../domain/services/growth_service.dart';
-import '../../../features/character/animation/character_animator.dart';
+import '../../../features/character/providers/character_animation_provider.dart';
+import '../../../features/character/widgets/rive_character_view.dart';
 import '../../../shared/providers/app_providers.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -49,9 +49,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
     _ctrl.clear();
-    ref.read(characterTalkingProvider.notifier).state = true;
+    ref.read(characterAnimationProvider.notifier).setTalking(true);
     await ref.read(chatHistoryProvider.notifier).send(text, voice: _voice);
-    ref.read(characterTalkingProvider.notifier).state = false;
+    ref.read(characterAnimationProvider.notifier).setTalking(false);
     await Future<void>.delayed(const Duration(milliseconds: 50));
     if (_scroll.hasClients) {
       _scroll.animateTo(
@@ -98,22 +98,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                CharacterAnimator(
+                RiveCharacterView(
                   character: character,
                   size: 200,
-                  talking: ref.watch(characterTalkingProvider),
-                  onTap: () => ref
-                      .read(characterProvider.notifier)
-                      .interact(InteractionGesture.tap),
-                  onStroke: () => ref
-                      .read(characterProvider.notifier)
-                      .interact(InteractionGesture.stroke),
-                  onPoke: () => ref
-                      .read(characterProvider.notifier)
-                      .interact(InteractionGesture.pokeForehead),
-                  onShake: () => ref
-                      .read(characterProvider.notifier)
-                      .interact(InteractionGesture.shake),
                 ),
                 if (_cameraOn)
                   Positioned(

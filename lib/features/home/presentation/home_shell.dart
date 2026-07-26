@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../data/models/enums.dart';
 import '../../../shared/providers/app_providers.dart';
 import '../widgets/tom_style_ui.dart';
 
@@ -41,18 +40,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       kind: RoomSceneKind.living,
       character: character,
       pose: _pose,
-      onCharacterTap: () {
-        setState(() => _pose = CharacterPose.react);
-        ref.read(characterProvider.notifier).interact(InteractionGesture.tap);
-      },
-      onStroke: () {
-        setState(() => _pose = CharacterPose.happy);
-        ref.read(characterProvider.notifier).interact(InteractionGesture.stroke);
-      },
-      onPoke: () =>
-          ref.read(characterProvider.notifier).interact(InteractionGesture.pokeForehead),
-      onShake: () =>
-          ref.read(characterProvider.notifier).interact(InteractionGesture.shake),
+      // Touch reactions + mood handled by RiveCharacterView / animation provider.
+      onCharacterTap: () => setState(() => _pose = CharacterPose.react),
+      onStroke: () => setState(() => _pose = CharacterPose.happy),
       topBar: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Column(
