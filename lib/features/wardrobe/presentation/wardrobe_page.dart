@@ -61,9 +61,9 @@ class WardrobePage extends StatelessWidget {
   }
 
   Widget _sideCats({required bool left}) {
-    const icons = [
+    final icons = <IconData>[
       Icons.visibility,
-      Icons.sunglasses,
+      Icons.remove_red_eye_outlined,
       Icons.checkroom,
       Icons.watch,
       Icons.pets,
