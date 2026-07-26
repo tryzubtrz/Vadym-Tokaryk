@@ -2,20 +2,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../data/models/character_model.dart';
 import '../../../data/models/enums.dart';
 
-/// Living character renderer (CustomPainter).
-/// Designed to be swapped with Rive `.riv` assets when available —
-/// same controller inputs: breathe, blink, mood, talk, react.
+/// Talking-Tom style anthropomorphic cat (Masya / Syryk).
+/// Always breathing, blinking, reacting — never fully static.
 class CharacterAnimator extends StatefulWidget {
   const CharacterAnimator({
     super.key,
     required this.character,
-    this.size = 280,
+    this.size = 320,
     this.talking = false,
     this.reaction,
+    this.pose = CharacterPose.idle,
     this.onTap,
     this.onStroke,
     this.onPoke,
@@ -26,6 +25,7 @@ class CharacterAnimator extends StatefulWidget {
   final double size;
   final bool talking;
   final InteractionGesture? reaction;
+  final CharacterPose pose;
   final VoidCallback? onTap;
   final VoidCallback? onStroke;
   final VoidCallback? onPoke;
@@ -35,13 +35,14 @@ class CharacterAnimator extends StatefulWidget {
   State<CharacterAnimator> createState() => _CharacterAnimatorState();
 }
 
+enum CharacterPose { idle, happy, eat, sleep, sit, wave }
+
 class _CharacterAnimatorState extends State<CharacterAnimator>
     with TickerProviderStateMixin {
   late final AnimationController _breathe;
   late final AnimationController _blink;
   late final AnimationController _idle;
   late final AnimationController _react;
-
   Offset _dragAccum = Offset.zero;
 
   @override
@@ -49,30 +50,27 @@ class _CharacterAnimatorState extends State<CharacterAnimator>
     super.initState();
     _breathe = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 2000),
     )..repeat(reverse: true);
-
     _blink = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 140),
+      duration: const Duration(milliseconds: 120),
     );
     _scheduleBlink();
-
     _idle = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3200),
+      duration: const Duration(milliseconds: 2800),
     )..repeat(reverse: true);
-
     _react = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 420),
     );
   }
 
-  void _scheduleBlink() async {
+  Future<void> _scheduleBlink() async {
     while (mounted) {
       await Future<void>.delayed(
-        Duration(milliseconds: 1800 + math.Random().nextInt(3200)),
+        Duration(milliseconds: 1600 + math.Random().nextInt(2800)),
       );
       if (!mounted) return;
       await _blink.forward();
@@ -116,17 +114,17 @@ class _CharacterAnimatorState extends State<CharacterAnimator>
       },
       child: AnimatedBuilder(
         animation: Listenable.merge([_breathe, _blink, _idle, _react]),
-        builder: (context, _) {
+        builder: (_, __) {
           return CustomPaint(
-            size: Size.square(widget.size),
-            painter: _CharacterPainter(
+            size: Size(widget.size, widget.size * 1.15),
+            painter: _CatPainter(
               character: widget.character,
               breathe: _breathe.value,
               blink: _blink.value,
               idle: _idle.value,
               react: _react.value,
               talking: widget.talking,
-              reaction: widget.reaction,
+              pose: widget.pose,
             ),
           );
         },
@@ -135,15 +133,15 @@ class _CharacterAnimatorState extends State<CharacterAnimator>
   }
 }
 
-class _CharacterPainter extends CustomPainter {
-  _CharacterPainter({
+class _CatPainter extends CustomPainter {
+  _CatPainter({
     required this.character,
     required this.breathe,
     required this.blink,
     required this.idle,
     required this.react,
     required this.talking,
-    required this.reaction,
+    required this.pose,
   });
 
   final CharacterModel character;
@@ -152,251 +150,369 @@ class _CharacterPainter extends CustomPainter {
   final double idle;
   final double react;
   final bool talking;
-  final InteractionGesture? reaction;
+  final CharacterPose pose;
+
+  bool get _girl => character.type == CharacterType.masya;
+
+  Color get _fur => _girl
+      ? const Color(0xFFF2B86A) // cream-orange Masya
+      : const Color(0xFFE59A4A); // ginger Syryk
+
+  Color get _furDark => _girl
+      ? const Color(0xFFE0943E)
+      : const Color(0xFFC97830);
+
+  Color get _muzzle => const Color(0xFFFFF3E0);
+
+  Color get _eye =>
+      _girl ? const Color(0xFF4CAF50) : const Color(0xFFC9A227);
+
+  Color get _clothes =>
+      _girl ? const Color(0xFFF0E6D8) : const Color(0xFF9AA3A8);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2 + 10;
-    final scale = 1 + breathe * 0.03;
-    final sway = (idle - 0.5) * 6;
-    final reactBounce = math.sin(react * math.pi) * 8;
+    final w = size.width;
+    final h = size.height;
+    final cx = w / 2;
+    final scale = 1 + breathe * 0.025;
+    final sway = (idle - 0.5) * 5;
+    final bounce = math.sin(react * math.pi) * 10;
 
     canvas.save();
-    canvas.translate(cx + sway * 0.3, cy - reactBounce);
-    canvas.scale(scale, 1 + breathe * 0.02);
+    canvas.translate(cx + sway * 0.25, h * 0.55 - bounce);
+    canvas.scale(scale, 1 + breathe * 0.018);
 
-    final isGirl = character.type == CharacterType.masya;
-    final bodyColor = _bodyColor(isGirl);
-    final bodyW = _bodyWidth();
-    final bodyH = size.height * 0.42;
+    final bodyW = switch (character.bodyShape) {
+      BodyShape.thin => w * 0.34,
+      BodyShape.normal => w * 0.40,
+      BodyShape.plump => w * 0.48,
+    };
 
-    // Shadow
+    // Soft ground shadow
     canvas.drawOval(
       Rect.fromCenter(
-        center: Offset(0, bodyH * 0.72),
-        width: bodyW * 1.1,
+        center: Offset(0, h * 0.42),
+        width: bodyW * 1.35,
         height: 18,
       ),
-      Paint()..color = Colors.black.withValues(alpha: 0.12),
+      Paint()..color = Colors.black.withValues(alpha: 0.14),
     );
 
-    // Body
-    final bodyRect = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(0, bodyH * 0.15), width: bodyW, height: bodyH),
-      const Radius.circular(40),
+    // Tail
+    final tail = Path()
+      ..moveTo(bodyW * 0.35, h * 0.05)
+      ..quadraticBezierTo(
+        bodyW * 0.75 + sway,
+        -h * 0.05,
+        bodyW * 0.55 + sway * 0.5,
+        -h * 0.22,
+      );
+    canvas.drawPath(
+      tail,
+      Paint()
+        ..color = _fur
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = w * 0.07
+        ..strokeCap = StrokeCap.round,
     );
-    canvas.drawRRect(bodyRect, Paint()..color = bodyColor);
+
+    // Legs
+    final legPaint = Paint()..color = _fur;
+    final legY = h * 0.28;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(-bodyW * 0.22, legY), width: w * 0.11, height: h * 0.22),
+        const Radius.circular(20),
+      ),
+      legPaint,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(bodyW * 0.22, legY), width: w * 0.11, height: h * 0.22),
+        const Radius.circular(20),
+      ),
+      legPaint,
+    );
+    // Paws
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(-bodyW * 0.22, legY + h * 0.1), width: w * 0.13, height: w * 0.08),
+      Paint()..color = _muzzle,
+    );
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(bodyW * 0.22, legY + h * 0.1), width: w * 0.13, height: w * 0.08),
+      Paint()..color = _muzzle,
+    );
+
+    // Body / hoodie-sweater
+    final bodyRect = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(0, h * 0.02),
+        width: bodyW,
+        height: h * 0.42,
+      ),
+      Radius.circular(bodyW * 0.35),
+    );
+    canvas.drawRRect(bodyRect, Paint()..color = _clothes);
+
+    // Hoodie pocket / sweater rib
+    if (!_girl) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromCenter(center: const Offset(0, 18), width: 70, height: 28),
+          const Radius.circular(12),
+        ),
+        Paint()..color = const Color(0xFF8A9398),
+      );
+      // Hood strings
+      canvas.drawLine(
+        const Offset(-18, -40),
+        const Offset(-10, 0),
+        Paint()
+          ..color = Colors.white70
+          ..strokeWidth = 2.5,
+      );
+      canvas.drawLine(
+        const Offset(18, -40),
+        const Offset(10, 0),
+        Paint()
+          ..color = Colors.white70
+          ..strokeWidth = 2.5,
+      );
+    } else {
+      canvas.drawLine(
+        Offset(-bodyW * 0.35, h * 0.16),
+        Offset(bodyW * 0.35, h * 0.16),
+        Paint()
+          ..color = const Color(0xFFE0D4C4)
+          ..strokeWidth = 6,
+      );
+    }
+
+    // Arms
+    final armSwing = (idle - 0.5) * 14;
+    final armPaint = Paint()
+      ..color = _fur
+      ..strokeWidth = w * 0.085
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final waveUp = pose == CharacterPose.wave || pose == CharacterPose.happy;
+    canvas.drawLine(
+      Offset(-bodyW * 0.42, -h * 0.05),
+      Offset(-bodyW * 0.58, waveUp ? -h * 0.18 : h * 0.12 + armSwing),
+      armPaint,
+    );
+    canvas.drawLine(
+      Offset(bodyW * 0.42, -h * 0.05),
+      Offset(bodyW * 0.58, h * 0.12 - armSwing),
+      armPaint,
+    );
+    // Hand paws
+    canvas.drawCircle(
+      Offset(-bodyW * 0.58, waveUp ? -h * 0.18 : h * 0.12 + armSwing),
+      w * 0.045,
+      Paint()..color = _muzzle,
+    );
+    canvas.drawCircle(
+      Offset(bodyW * 0.58, h * 0.12 - armSwing),
+      w * 0.045,
+      Paint()..color = _muzzle,
+    );
 
     // Dirt overlay
-    if (character.dirtLevel > 20) {
+    if (character.dirtLevel > 25) {
       canvas.drawRRect(
         bodyRect,
         Paint()
-          ..color = const Color(0xFF6B4F3A)
-              .withValues(alpha: (character.dirtLevel / 200).clamp(0.05, 0.35)),
+          ..color = const Color(0xFF6B4F3A).withValues(
+            alpha: (character.dirtLevel / 180).clamp(0.05, 0.3),
+          ),
       );
     }
 
     // Head
-    final headR = size.width * 0.22;
-    final headCenter = Offset(0, -bodyH * 0.28);
-    canvas.drawCircle(headCenter, headR, Paint()..color = bodyColor);
+    final headR = w * 0.24;
+    final headC = Offset(0, -h * 0.28);
+    canvas.drawCircle(headC, headR, Paint()..color = _fur);
 
-    // Hair
-    final hair = Paint()
-      ..color = isGirl ? const Color(0xFF5A2E1F) : const Color(0xFF3B2A22);
-    if (isGirl) {
-      canvas.drawArc(
-        Rect.fromCircle(center: headCenter.translate(0, -4), radius: headR + 4),
-        math.pi,
-        math.pi,
-        false,
-        hair..style = PaintingStyle.stroke
-          ..strokeWidth = 14,
-      );
-      // Side hair
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: headCenter.translate(-headR * 0.85, headR * 0.3),
-          width: 18,
-          height: 40,
-        ),
-        hair..style = PaintingStyle.fill,
-      );
-      canvas.drawOval(
-        Rect.fromCenter(
-          center: headCenter.translate(headR * 0.85, headR * 0.3),
-          width: 18,
-          height: 40,
-        ),
-        hair,
-      );
-    } else {
-      canvas.drawArc(
-        Rect.fromCircle(center: headCenter.translate(0, -6), radius: headR + 2),
-        math.pi * 1.05,
-        math.pi * 0.9,
-        true,
-        hair..style = PaintingStyle.fill,
-      );
-      if (character.hasBeard) {
-        canvas.drawArc(
-          Rect.fromCircle(
-            center: headCenter.translate(0, headR * 0.35),
-            radius: headR * 0.55,
-          ),
-          0.2,
-          math.pi - 0.4,
-          false,
-          Paint()
-            ..color = const Color(0xFF4A3728)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 6,
+    // Tabby / cheek fluff
+    if (!_girl) {
+      final stripe = Paint()
+        ..color = _furDark.withValues(alpha: 0.55)
+        ..strokeWidth = 4
+        ..strokeCap = StrokeCap.round;
+      for (final dx in [-18.0, 0.0, 18.0]) {
+        canvas.drawLine(
+          headC.translate(dx, -headR * 0.55),
+          headC.translate(dx * 0.6, -headR * 0.15),
+          stripe,
         );
       }
     }
 
+    // Ears
+    _drawEar(canvas, headC.translate(-headR * 0.62, -headR * 0.78), true);
+    _drawEar(canvas, headC.translate(headR * 0.62, -headR * 0.78), false);
+
+    // Muzzle
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: headC.translate(0, headR * 0.28),
+        width: headR * 1.15,
+        height: headR * 0.85,
+      ),
+      Paint()..color = _muzzle,
+    );
+
     // Eyes
-    final eyeY = headCenter.dy - 4;
-    final eyeOpen = 1 - blink;
-    final eyeH = 10.0 * eyeOpen + 1;
-    _drawEye(canvas, Offset(headCenter.dx - 16, eyeY), eyeH);
-    _drawEye(canvas, Offset(headCenter.dx + 16, eyeY), eyeH);
+    final eyeOpen = pose == CharacterPose.sleep ? 0.08 : (1 - blink);
+    final eyeH = headR * 0.42 * eyeOpen + 1;
+    _drawEye(canvas, headC.translate(-headR * 0.32, -headR * 0.05), eyeH);
+    _drawEye(canvas, headC.translate(headR * 0.32, -headR * 0.05), eyeH);
+
+    // Nose
+    final nose = Path()
+      ..moveTo(headC.dx, headC.dy + headR * 0.18)
+      ..lineTo(headC.dx - 7, headC.dy + headR * 0.30)
+      ..lineTo(headC.dx + 7, headC.dy + headR * 0.30)
+      ..close();
+    canvas.drawPath(nose, Paint()..color = const Color(0xFFE89A9A));
 
     // Mouth
+    final mouthY = headC.dy + headR * 0.42;
     final mouthPaint = Paint()
       ..color = const Color(0xFF5A2A2A)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
+      ..strokeWidth = 2.6
       ..strokeCap = StrokeCap.round;
-    final mouthY = headCenter.dy + headR * 0.35;
-    final talkOpen = talking ? (0.5 + breathe * 0.5) * 8 : 0.0;
-    if (character.isSleeping) {
-      // zzz mouth soft
+    final talk = talking ? 6.0 + breathe * 6 : 0.0;
+    if (pose == CharacterPose.sleep) {
       canvas.drawLine(
-        Offset(headCenter.dx - 8, mouthY),
-        Offset(headCenter.dx + 8, mouthY),
+        Offset(headC.dx - 8, mouthY),
+        Offset(headC.dx + 8, mouthY),
         mouthPaint,
       );
     } else if (character.mood < 35) {
       canvas.drawArc(
-        Rect.fromCenter(
-          center: Offset(headCenter.dx, mouthY + 4),
-          width: 22,
-          height: 12,
-        ),
+        Rect.fromCenter(center: Offset(headC.dx, mouthY + 6), width: 22, height: 12),
         math.pi,
         math.pi,
         false,
         mouthPaint,
       );
-    } else {
+    } else if (pose == CharacterPose.happy || pose == CharacterPose.eat || character.mood > 75) {
       canvas.drawArc(
         Rect.fromCenter(
-          center: Offset(headCenter.dx, mouthY - talkOpen * 0.2),
-          width: 24,
-          height: 10 + talkOpen,
+          center: Offset(headC.dx, mouthY - 2),
+          width: 28,
+          height: 16 + talk,
         ),
         0.15,
         math.pi - 0.3,
         false,
         mouthPaint,
       );
-    }
-
-    // Cheeks
-    if (character.mood > 60) {
-      final cheek = Paint()
-        ..color = AppColors.brandCoral.withValues(alpha: 0.35);
-      canvas.drawCircle(
-        headCenter.translate(-headR * 0.55, headR * 0.15),
-        6,
-        cheek,
+      // Tongue peek
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(headC.dx, mouthY + 4 + talk * 0.2),
+          width: 10,
+          height: 8 + talk * 0.3,
+        ),
+        Paint()..color = const Color(0xFFFF7A8A),
       );
-      canvas.drawCircle(
-        headCenter.translate(headR * 0.55, headR * 0.15),
-        6,
-        cheek,
+    } else {
+      canvas.drawArc(
+        Rect.fromCenter(
+          center: Offset(headC.dx, mouthY),
+          width: 20,
+          height: 8 + talk,
+        ),
+        0.2,
+        math.pi - 0.4,
+        false,
+        mouthPaint,
       );
     }
 
-    // Arms sway
-    final armPaint = Paint()
-      ..color = bodyColor
-      ..strokeWidth = 14
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final armSwing = (idle - 0.5) * 12;
-    canvas.drawLine(
-      Offset(-bodyW * 0.42, -10),
-      Offset(-bodyW * 0.55, 30 + armSwing),
-      armPaint,
-    );
-    canvas.drawLine(
-      Offset(bodyW * 0.42, -10),
-      Offset(bodyW * 0.55, 30 - armSwing),
-      armPaint,
-    );
-
-    // Age badge sparkle when young
-    if (character.age < 10) {
-      final spark = Paint()..color = AppColors.brandSun.withValues(alpha: 0.7);
-      canvas.drawCircle(Offset(headR * 0.9, -bodyH * 0.5), 3 + breathe * 2, spark);
+    // Whiskers
+    final whisker = Paint()
+      ..color = Colors.black54
+      ..strokeWidth = 1.4;
+    for (final side in [-1.0, 1.0]) {
+      for (final dy in [-4.0, 2.0, 8.0]) {
+        canvas.drawLine(
+          headC.translate(side * headR * 0.35, headR * 0.25 + dy),
+          headC.translate(side * headR * 0.95, headR * 0.18 + dy * 1.2),
+          whisker,
+        );
+      }
     }
 
-    canvas.restore();
+    // Beard for senior Syryk
+    if (character.hasBeard) {
+      canvas.drawArc(
+        Rect.fromCircle(
+          center: headC.translate(0, headR * 0.55),
+          radius: headR * 0.45,
+        ),
+        0.3,
+        math.pi - 0.6,
+        false,
+        Paint()
+          ..color = const Color(0xFF8B6914)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 5,
+      );
+    }
 
     // Sleep Zzz
-    if (character.isSleeping) {
+    if (character.isSleeping || pose == CharacterPose.sleep) {
       final tp = TextPainter(
         text: TextSpan(
-          text: 'Zz',
+          text: 'Zzz',
           style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.85),
-            fontSize: 18 + breathe * 4,
-            fontWeight: FontWeight.bold,
+            color: Colors.white.withValues(alpha: 0.9),
+            fontSize: 22 + breathe * 6,
+            fontWeight: FontWeight.w900,
+            shadows: const [Shadow(blurRadius: 4, color: Colors.black26)],
           ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      tp.paint(canvas, Offset(size.width * 0.68, size.height * 0.18));
+      tp.paint(canvas, Offset(headR * 0.9, -h * 0.55));
     }
+
+    canvas.restore();
+  }
+
+  void _drawEar(Canvas canvas, Offset tip, bool left) {
+    final path = Path()
+      ..moveTo(tip.dx + (left ? 18 : -18), tip.dy + 28)
+      ..lineTo(tip.dx, tip.dy - 6)
+      ..lineTo(tip.dx + (left ? -8 : 8), tip.dy + 30)
+      ..close();
+    canvas.drawPath(path, Paint()..color = _fur);
+    final inner = Path()
+      ..moveTo(tip.dx + (left ? 10 : -10), tip.dy + 24)
+      ..lineTo(tip.dx, tip.dy + 4)
+      ..lineTo(tip.dx + (left ? -2 : 2), tip.dy + 24)
+      ..close();
+    canvas.drawPath(inner, Paint()..color = const Color(0xFFFFC0CB));
   }
 
   void _drawEye(Canvas canvas, Offset c, double h) {
     canvas.drawOval(
-      Rect.fromCenter(center: c, width: 12, height: h),
+      Rect.fromCenter(center: c, width: 22, height: h),
       Paint()..color = Colors.white,
     );
-    if (h > 3) {
-      canvas.drawCircle(
-        c,
-        3.5,
-        Paint()..color = AppColors.brandInk,
-      );
+    if (h > 4) {
+      canvas.drawCircle(c, 7, Paint()..color = _eye);
+      canvas.drawCircle(c.translate(-2, -2), 2.5, Paint()..color = Colors.white);
+      canvas.drawCircle(c, 3.2, Paint()..color = Colors.black87);
     }
-  }
-
-  double _bodyWidth() {
-    return switch (character.bodyShape) {
-      BodyShape.thin => 78,
-      BodyShape.normal => 96,
-      BodyShape.plump => 118,
-    };
-  }
-
-  Color _bodyColor(bool girl) {
-    // Age tint shifts slightly.
-    if (character.stage == AgeStage.senior) {
-      return girl ? const Color(0xFFE8B8A8) : const Color(0xFFD9B29C);
-    }
-    if (character.stage == AgeStage.child) {
-      return girl ? const Color(0xFFFFC6B8) : const Color(0xFFFFD0B5);
-    }
-    return girl ? const Color(0xFFF2B8A4) : const Color(0xFFE8C0A8);
   }
 
   @override
-  bool shouldRepaint(covariant _CharacterPainter old) => true;
+  bool shouldRepaint(covariant _CatPainter old) => true;
 }

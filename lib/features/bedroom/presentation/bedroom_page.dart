@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../features/character/animation/character_animator.dart';
+import '../../../features/home/widgets/tom_style_ui.dart';
 import '../../../shared/providers/app_providers.dart';
-import '../../../shared/widgets/gradient_scaffold.dart';
 
 class BedroomPage extends ConsumerStatefulWidget {
   const BedroomPage({super.key});
@@ -18,9 +17,10 @@ class BedroomPage extends ConsumerStatefulWidget {
 
 class _BedroomPageState extends ConsumerState<BedroomPage> {
   bool _lightsOff = false;
-  bool _nightLight = false;
+  bool _nightLight = true;
   bool _lullaby = false;
   String? _dream;
+  CharacterPose _pose = CharacterPose.idle;
 
   @override
   Widget build(BuildContext context) {
@@ -29,152 +29,151 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final bg = _lightsOff
-        ? AppColors.bedroomGradient
-        : const LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFFFFF0E0), Color(0xFFE8D4FF)],
-          );
-
-    return GradientScaffold(
-      gradient: bg,
-      appBar: AppBar(
-        title: const Text('Спальня'),
-        foregroundColor: _lightsOff ? Colors.white : null,
-      ),
-      child: Column(
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
         children: [
-          Text(
-            'Енергія: ${character.needs.energy.toStringAsFixed(0)}%',
-            style: TextStyle(
-              color: _lightsOff ? Colors.white70 : AppColors.brandInk,
-              fontWeight: FontWeight.w700,
+          const RoomSceneBackground(kind: RoomSceneKind.bedroom),
+          if (_lightsOff)
+            Container(color: Colors.black.withValues(alpha: 0.55)),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Row(
+                children: [
+                  _back(context),
+                  const SizedBox(width: 8),
+                  LevelBadge(
+                    level: character.age,
+                    progress: character.yearProgress,
+                  ),
+                  const Spacer(),
+                  TomCurrencyBar(
+                    coins: character.coins,
+                    gems: character.donateCoins,
+                  ),
+                ],
+              ),
             ),
           ),
           if (_dream != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
+            Positioned(
+              top: 100,
+              left: 20,
+              right: 20,
               child: Text(
                 _dream!,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: _lightsOff ? Colors.white : AppColors.brandInk,
-                  fontWeight: FontWeight.w700,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
                 ),
               ).animate().fadeIn(),
             ),
-          Expanded(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Bed
-                Positioned(
-                  bottom: 40,
-                  child: Container(
-                    width: 280,
-                    height: 90,
-                    decoration: BoxDecoration(
-                      color: _lightsOff
-                          ? const Color(0xFF3A4068)
-                          : const Color(0xFFFFD6E0),
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                  ),
-                ),
-                CharacterAnimator(
-                  character: character.copyWith(isSleeping: character.isSleeping),
-                  size: 220,
-                ),
-                if (_nightLight)
-                  Positioned(
-                    right: 36,
-                    bottom: 120,
-                    child: Icon(
-                      Icons.nightlight_round,
-                      size: 36,
-                      color: AppColors.brandSun.withValues(alpha: 0.85),
-                    )
-                        .animate(onPlay: (c) => c.repeat(reverse: true))
-                        .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1)),
-                  ),
-                if (_lullaby)
-                  Positioned(
-                    left: 24,
-                    top: 40,
-                    child: const Text('🎵 ♪ ♫')
-                        .animate(onPlay: (c) => c.repeat())
-                        .moveX(begin: 0, end: 20, duration: 1600.ms),
-                  ),
-              ],
+          Align(
+            alignment: const Alignment(0, 0.1),
+            child: CharacterAnimator(
+              character: character,
+              size: MediaQuery.of(context).size.width * 0.72,
+              pose: character.isSleeping ? CharacterPose.sleep : _pose,
             ),
           ),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              ElevatedButton.icon(
-                onPressed: () => setState(() => _lightsOff = !_lightsOff),
-                icon: Icon(_lightsOff ? Icons.lightbulb : Icons.lightbulb_outline),
-                label: Text(_lightsOff ? 'Увімкнути світло' : 'Вимкнути світло'),
-              ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _lightsOff ? Colors.white : null,
-                  side: BorderSide(
-                    color: _lightsOff ? Colors.white54 : AppColors.brandCoral,
+          if (_nightLight)
+            Positioned(
+              right: 40,
+              bottom: 160,
+              child: const Icon(Icons.nightlight_round, size: 40, color: Color(0xFFFFE066))
+                  .animate(onPlay: (c) => c.repeat(reverse: true))
+                  .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.15, 1.15)),
+            ),
+          if (_lullaby)
+            Positioned(
+              left: 24,
+              top: 120,
+              child: const Text('🎵 ♪ ♫', style: TextStyle(fontSize: 28))
+                  .animate(onPlay: (c) => c.repeat())
+                  .moveX(begin: 0, end: 24, duration: 1600.ms),
+            ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 20,
+            child: SafeArea(
+              top: false,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  TomActionButton(
+                    icon: _lightsOff ? Icons.lightbulb : Icons.lightbulb_outline,
+                    color: const Color(0xFFFFC107),
+                    onTap: () => setState(() => _lightsOff = !_lightsOff),
                   ),
-                ),
-                onPressed: () => setState(() => _nightLight = !_nightLight),
-                icon: const Icon(Icons.nightlight),
-                label: Text(_nightLight ? 'Нічник вимк' : 'Нічник'),
-              ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _lightsOff ? Colors.white : null,
-                  side: BorderSide(
-                    color: _lightsOff ? Colors.white54 : AppColors.brandCoral,
+                  TomActionButton(
+                    icon: Icons.nightlight,
+                    color: const Color(0xFF7E57C2),
+                    selected: _nightLight,
+                    onTap: () => setState(() => _nightLight = !_nightLight),
                   ),
-                ),
-                onPressed: () => setState(() => _lullaby = !_lullaby),
-                icon: const Icon(Icons.music_note),
-                label: Text(_lullaby ? 'Стоп колискова' : 'Колискова'),
+                  TomActionButton(
+                    icon: Icons.music_note,
+                    color: const Color(0xFF26A69A),
+                    selected: _lullaby,
+                    onTap: () => setState(() => _lullaby = !_lullaby),
+                  ),
+                  TomActionButton(
+                    icon: character.isSleeping
+                        ? Icons.wb_sunny
+                        : Icons.bedtime,
+                    color: const Color(0xFFAB47BC),
+                    onTap: () async {
+                      if (!character.isSleeping) {
+                        try {
+                          await ref
+                              .read(characterProvider.notifier)
+                              .sleep(_lightsOff);
+                          setState(() {
+                            _pose = CharacterPose.sleep;
+                            _dream = null;
+                          });
+                        } catch (e) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$e')),
+                          );
+                        }
+                      } else {
+                        await ref.read(characterProvider.notifier).wake();
+                        setState(() {
+                          _lightsOff = false;
+                          _pose = CharacterPose.wave;
+                          _dream = Random().nextBool()
+                              ? '😴 Снилось, що ми стрибали на хмарах!'
+                              : 'Доброго ранку! ☀️';
+                        });
+                      }
+                    },
+                  ),
+                ],
               ),
-              if (!character.isSleeping)
-                ElevatedButton(
-                  onPressed: () async {
-                    try {
-                      await ref
-                          .read(characterProvider.notifier)
-                          .sleep(_lightsOff);
-                      setState(() => _dream = null);
-                    } catch (e) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('$e')),
-                      );
-                    }
-                  },
-                  child: const Text('Лягти спати'),
-                )
-              else
-                ElevatedButton(
-                  onPressed: () async {
-                    await ref.read(characterProvider.notifier).wake();
-                    final tell = Random().nextBool();
-                    setState(() {
-                      _dream = tell
-                          ? '😴 Мені снилось, що ми літали на хмарах і їли тістечка!'
-                          : 'Доброго ранку! Добре виспався.';
-                      _lightsOff = false;
-                    });
-                  },
-                  child: const Text('Прокинутись'),
-                ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
         ],
+      ),
+    );
+  }
+
+  Widget _back(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.pop(context),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.35),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(Icons.arrow_back, color: Colors.white),
       ),
     );
   }
