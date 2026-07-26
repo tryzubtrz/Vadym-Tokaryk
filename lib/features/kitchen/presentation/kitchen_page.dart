@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/food_item.dart';
-import '../../../features/character/animation/character_animator.dart';
 import '../../../features/home/widgets/tom_style_ui.dart';
 import '../../../shared/providers/app_providers.dart';
 
@@ -18,7 +17,6 @@ class KitchenPage extends ConsumerStatefulWidget {
 class _KitchenPageState extends ConsumerState<KitchenPage> {
   bool _fridgeOpen = true;
   String? _reaction;
-  CharacterPose _pose = CharacterPose.idle;
 
   @override
   Widget build(BuildContext context) {
@@ -28,56 +26,29 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
+    return TomRoomStage(
+      kind: RoomSceneKind.kitchen,
+      character: character,
+      pose: CharacterPose.eat,
+      topBar: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Row(
+          children: [
+            const TomBackButton(),
+            const SizedBox(width: 8),
+            LevelBadge(level: character.age, progress: character.yearProgress),
+            const Spacer(),
+            TomCurrencyBar(coins: character.coins, gems: character.donateCoins),
+          ],
+        ),
+      ),
+      overlay: Stack(
         children: [
-          const RoomSceneBackground(kind: RoomSceneKind.kitchen),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Row(
-                children: [
-                  _back(context),
-                  const SizedBox(width: 8),
-                  LevelBadge(
-                    level: character.age,
-                    progress: character.yearProgress,
-                  ),
-                  const Spacer(),
-                  TomCurrencyBar(
-                    coins: character.coins,
-                    gems: character.donateCoins,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_reaction != null)
-            Positioned(
-              top: 100,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  _reaction!,
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
-                  ),
-                ).animate().scale().fadeOut(delay: 1100.ms),
-              ),
-            ),
-          Align(
-            alignment: const Alignment(0, -0.05),
+          // Drop food onto the 3D scene character area
+          Positioned.fill(
             child: DragTarget<FoodItem>(
               onAcceptWithDetails: (details) async {
-                setState(() {
-                  _pose = CharacterPose.eat;
-                  _reaction = null;
-                });
+                setState(() => _reaction = null);
                 try {
                   await ref.read(characterProvider.notifier).feed(details.data);
                   setState(() => _reaction = 'Ням-ням! 😋');
@@ -85,87 +56,72 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
                   setState(() => _reaction = '$e');
                 }
               },
-              builder: (context, candidate, _) {
-                return CharacterAnimator(
-                  character: character,
-                  size: MediaQuery.of(context).size.width * 0.7,
-                  pose: candidate.isNotEmpty ? CharacterPose.eat : _pose,
-                  talking: candidate.isNotEmpty,
-                );
-              },
+              builder: (context, candidate, _) => const SizedBox.expand(),
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      TomActionButton(
-                        icon: Icons.kitchen,
-                        color: AppColors.brandSky,
-                        selected: _fridgeOpen,
-                        onTap: () =>
-                            setState(() => _fridgeOpen = !_fridgeOpen),
-                      ),
-                      const SizedBox(width: 16),
-                      TomActionButton(
-                        icon: Icons.storefront,
-                        color: AppColors.brandCoral,
-                        onTap: () => _openShop(context),
-                      ),
-                    ],
+          if (_reaction != null)
+            Positioned(
+              top: 110,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  _reaction!,
+                  style: const TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    shadows: [Shadow(blurRadius: 10, color: Colors.black54)],
                   ),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    height: _fridgeOpen ? 150 : 0,
-                    margin: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                    child: _fridgeOpen
-                        ? Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFE8F6FF).withValues(alpha: 0.95),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white, width: 3),
-                            ),
-                            child: fridge.isEmpty
-                                ? const Center(child: Text('Порожньо — купи їжу'))
-                                : ListView(
-                                    scrollDirection: Axis.horizontal,
-                                    padding: const EdgeInsets.all(10),
-                                    children: [
-                                      for (final food in fridge)
-                                        _DraggableFood(food: food),
-                                    ],
-                                  ),
-                          )
-                        : const SizedBox.shrink(),
-                  ),
-                ],
+                ).animate().scale().fadeOut(delay: 1100.ms),
               ),
             ),
-          ),
         ],
       ),
-    );
-  }
-
-  Widget _back(BuildContext context) {
-    return GestureDetector(
-      onTap: () => Navigator.pop(context),
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.35),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(Icons.arrow_back, color: Colors.white),
+      bottomBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TomActionButton(
+                icon: Icons.kitchen,
+                color: AppColors.brandSky,
+                selected: _fridgeOpen,
+                onTap: () => setState(() => _fridgeOpen = !_fridgeOpen),
+              ),
+              const SizedBox(width: 16),
+              TomActionButton(
+                icon: Icons.storefront,
+                color: AppColors.brandCoral,
+                onTap: () => _openShop(context),
+              ),
+            ],
+          ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            height: _fridgeOpen ? 150 : 0,
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            child: _fridgeOpen
+                ? Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.95),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                    child: fridge.isEmpty
+                        ? const Center(child: Text('Порожньо — купи їжу'))
+                        : ListView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.all(10),
+                            children: [
+                              for (final food in fridge) _DraggableFood(food: food),
+                            ],
+                          ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
       ),
     );
   }
@@ -193,13 +149,9 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
                       '🛒 Магазин їжі',
                       style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
                     ),
-                    const Text('Пакети 1 / 5 / 10 / 20'),
-                    const SizedBox(height: 12),
                     for (final item in FoodCatalog.shop) ...[
-                      Text(
-                        '${item.emoji} ${item.nameUk}',
-                        style: const TextStyle(fontWeight: FontWeight.w800),
-                      ),
+                      Text('${item.emoji} ${item.nameUk}',
+                          style: const TextStyle(fontWeight: FontWeight.w800)),
                       Wrap(
                         spacing: 8,
                         children: [
@@ -269,22 +221,17 @@ class _DraggableFood extends StatelessWidget {
       margin: const EdgeInsets.all(6),
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFFFF8F0),
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
-        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(food.emoji, style: const TextStyle(fontSize: 32)),
-          Text(
-            food.nameUk,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
+          Text(food.nameUk,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
           Text('×${food.quantity}', style: const TextStyle(fontSize: 11)),
         ],
       ),

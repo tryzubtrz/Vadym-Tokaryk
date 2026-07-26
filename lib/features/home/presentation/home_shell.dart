@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/app_colors.dart';
 import '../../../data/models/enums.dart';
-import '../../../features/character/animation/character_animator.dart';
 import '../../../shared/providers/app_providers.dart';
 import '../widgets/tom_style_ui.dart';
 
-/// Main play screen — Talking Tom layout:
-/// full-bleed room · big character · level badge · currencies · circular actions.
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
@@ -19,8 +14,7 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
-  int _action = 1; // smile / main
-  CharacterPose _pose = CharacterPose.idle;
+  int _action = 1;
 
   @override
   void initState() {
@@ -28,13 +22,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await ref.read(characterProvider.notifier).refresh();
       await ref.read(growthDayProvider.notifier).ensureQuestion();
-    });
-  }
-
-  void _setAction(int i, {CharacterPose pose = CharacterPose.idle}) {
-    setState(() {
-      _action = i;
-      _pose = pose;
     });
   }
 
@@ -46,136 +33,94 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final downloadProgress = ref.watch(downloadProgressProvider);
 
     if (character == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Full-bleed room
-          const RoomSceneBackground(kind: RoomSceneKind.living),
-          const FloatingDecor(),
-
-          // Top HUD
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-              child: Column(
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      LevelBadge(
-                        level: character.age,
-                        progress: character.yearProgress,
-                      ),
-                      const SizedBox(width: 8),
-                      // Plane / news + friends shortcuts
-                      _roundIcon(
-                        Icons.campaign_rounded,
-                        () => context.push('/news'),
-                        alert: true,
-                      ),
-                      const Spacer(),
-                      TomCurrencyBar(
-                        coins: character.coins,
-                        gems: character.donateCoins,
-                      ),
-                      const SizedBox(width: 6),
-                      _roundIcon(
-                        Icons.settings_rounded,
-                        () => context.push('/settings'),
-                      ),
-                    ],
-                  ),
-                  if (downloadLabel != null) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.black45,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            downloadLabel,
-                            style: const TextStyle(color: Colors.white, fontSize: 12),
-                          ),
-                          LinearProgressIndicator(value: downloadProgress),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+    return TomRoomStage(
+      kind: RoomSceneKind.living,
+      character: character,
+      pose: CharacterPose.idle,
+      onCharacterTap: () {
+        ref.read(characterProvider.notifier).interact(InteractionGesture.tap);
+        setState(() => _action = 1);
+      },
+      topBar: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                LevelBadge(
+                  level: character.age,
+                  progress: character.yearProgress,
+                ),
+                const SizedBox(width: 8),
+                _hudIcon(Icons.campaign_rounded, () => context.push('/news'),
+                    alert: true),
+                const Spacer(),
+                TomCurrencyBar(
+                  coins: character.coins,
+                  gems: character.donateCoins,
+                ),
+                const SizedBox(width: 6),
+                _hudIcon(Icons.settings_rounded, () => context.push('/settings')),
+              ],
             ),
-          ),
-
-          // Character center
-          Align(
-            alignment: const Alignment(0, 0.15),
-            child: CharacterAnimator(
-              character: character,
-              size: MediaQuery.of(context).size.width * 0.78,
-              pose: character.isSleeping ? CharacterPose.sleep : _pose,
-              talking: ref.watch(characterTalkingProvider),
-              reaction: ref.read(characterProvider.notifier).lastGesture,
-              onTap: () {
-                _setAction(1, pose: CharacterPose.happy);
-                ref
-                    .read(characterProvider.notifier)
-                    .interact(InteractionGesture.tap);
-              },
-              onStroke: () {
-                _setAction(1, pose: CharacterPose.happy);
-                ref
-                    .read(characterProvider.notifier)
-                    .interact(InteractionGesture.stroke);
-              },
-              onPoke: () => ref
-                  .read(characterProvider.notifier)
-                  .interact(InteractionGesture.pokeForehead),
-              onShake: () => ref
-                  .read(characterProvider.notifier)
-                  .interact(InteractionGesture.shake),
-            )
-                .animate(onPlay: (c) => c.repeat(reverse: true))
-                .moveY(begin: 0, end: -6, duration: 2200.ms),
-          ),
-
-          // Name chip
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 110,
-            child: Center(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            if (downloadLabel != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  borderRadius: BorderRadius.circular(20),
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  '${character.name} · IQ ${character.iq}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                  ),
+                child: Column(
+                  children: [
+                    Text(downloadLabel,
+                        style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    LinearProgressIndicator(value: downloadProgress),
+                  ],
                 ),
               ),
-            ),
+            ],
+          ],
+        ),
+      ),
+      sideBar: Column(
+        children: [
+          TomSideFab(
+            icon: Icons.sports_esports,
+            onTap: () => context.push('/games'),
           ),
-
-          // Daily question floating
-          if (growth.dailyQuestionAsked &&
+          TomSideFab(
+            icon: Icons.people_alt,
+            onTap: () => context.push('/friends'),
+          ),
+          TomSideFab(
+            icon: Icons.checkroom,
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Гардероб / скіни — скоро')),
+              );
+            },
+          ),
+          if (character.photoRoomUnlocked)
+            TomSideFab(
+              icon: Icons.photo_camera,
+              onTap: () => context.push('/photo'),
+            ),
+          if (character.codeRoomUnlocked)
+            TomSideFab(
+              icon: Icons.code,
+              onTap: () => context.push('/code'),
+            ),
+        ],
+      ),
+      overlay: growth.dailyQuestionAsked &&
               !growth.dailyQuestionAnswered &&
-              growth.dailyQuestionText != null)
-            Positioned(
+              growth.dailyQuestionText != null
+          ? Positioned(
               left: 16,
               right: 16,
               bottom: 170,
@@ -191,116 +136,66 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   }
                 },
               ),
+            )
+          : null,
+      bottomBar: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            TomActionButton(
+              icon: Icons.shopping_cart_rounded,
+              color: const Color(0xFF5A5A5A),
+              selected: _action == 0,
+              badge: '1',
+              onTap: () {
+                setState(() => _action = 0);
+                context.push('/economy');
+              },
             ),
-
-          // Circular bottom actions (Talking Tom style)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: SafeArea(
-              top: false,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 14),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.25),
-                    ],
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    TomActionButton(
-                      icon: Icons.shopping_cart_rounded,
-                      color: const Color(0xFF5A5A5A),
-                      selected: _action == 0,
-                      badge: '1',
-                      onTap: () {
-                        _setAction(0);
-                        context.push('/economy');
-                      },
-                    ),
-                    TomActionButton(
-                      icon: Icons.emoji_emotions_rounded,
-                      color: const Color(0xFF3DDC84),
-                      selected: _action == 1,
-                      onTap: () {
-                        _setAction(1, pose: CharacterPose.happy);
-                        context.push('/chat');
-                      },
-                    ),
-                    TomActionButton(
-                      icon: Icons.restaurant_rounded,
-                      color: const Color(0xFFE53935),
-                      selected: _action == 2,
-                      onTap: () {
-                        _setAction(2, pose: CharacterPose.eat);
-                        context.push('/kitchen');
-                      },
-                    ),
-                    TomActionButton(
-                      icon: Icons.wc_rounded,
-                      color: const Color(0xFF29B6F6),
-                      selected: _action == 3,
-                      onTap: () {
-                        _setAction(3);
-                        context.push('/bathroom');
-                      },
-                    ),
-                    TomActionButton(
-                      icon: Icons.bedtime_rounded,
-                      color: const Color(0xFFAB47BC),
-                      selected: _action == 4,
-                      onTap: () {
-                        _setAction(4, pose: CharacterPose.sleep);
-                        context.push('/bedroom');
-                      },
-                    ),
-                  ],
-                ),
-              ),
+            TomActionButton(
+              icon: Icons.emoji_emotions_rounded,
+              color: const Color(0xFF3DDC84),
+              selected: _action == 1,
+              onTap: () {
+                setState(() => _action = 1);
+                context.push('/chat');
+              },
             ),
-          ),
-
-          // Side shortcuts like Tom (games / friends / outfits)
-          Positioned(
-            right: 10,
-            top: MediaQuery.of(context).size.height * 0.28,
-            child: Column(
-              children: [
-                _sideFab(Icons.sports_esports, () => context.push('/games')),
-                const SizedBox(height: 10),
-                _sideFab(Icons.people_alt, () => context.push('/friends')),
-                const SizedBox(height: 10),
-                _sideFab(Icons.checkroom, () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Гардероб / скіни — скоро'),
-                    ),
-                  );
-                }),
-                if (character.photoRoomUnlocked) ...[
-                  const SizedBox(height: 10),
-                  _sideFab(Icons.photo_camera, () => context.push('/photo')),
-                ],
-                if (character.codeRoomUnlocked) ...[
-                  const SizedBox(height: 10),
-                  _sideFab(Icons.code, () => context.push('/code')),
-                ],
-              ],
+            TomActionButton(
+              icon: Icons.restaurant_rounded,
+              color: const Color(0xFFE53935),
+              selected: _action == 2,
+              onTap: () {
+                setState(() => _action = 2);
+                context.push('/kitchen');
+              },
             ),
-          ),
-        ],
+            TomActionButton(
+              icon: Icons.wc_rounded,
+              color: const Color(0xFF29B6F6),
+              selected: _action == 3,
+              onTap: () {
+                setState(() => _action = 3);
+                context.push('/bathroom');
+              },
+            ),
+            TomActionButton(
+              icon: Icons.bedtime_rounded,
+              color: const Color(0xFFAB47BC),
+              selected: _action == 4,
+              onTap: () {
+                setState(() => _action = 4);
+                context.push('/bedroom');
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _roundIcon(IconData icon, VoidCallback onTap, {bool alert = false}) {
+  Widget _hudIcon(IconData icon, VoidCallback onTap, {bool alert = false}) {
     return GestureDetector(
       onTap: onTap,
       child: Stack(
@@ -311,7 +206,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             height: 40,
             margin: const EdgeInsets.only(left: 4),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.3),
+              color: Colors.black.withValues(alpha: 0.35),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: Colors.white, size: 20),
@@ -330,24 +225,6 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _sideFab(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.92),
-          shape: BoxShape.circle,
-          boxShadow: const [
-            BoxShadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 2)),
-          ],
-        ),
-        child: Icon(icon, color: AppColors.brandInk),
       ),
     );
   }
@@ -376,16 +253,14 @@ class _DailyBubbleState extends State<_DailyBubble> {
     return Material(
       color: Colors.white.withValues(alpha: 0.95),
       borderRadius: BorderRadius.circular(18),
-      elevation: 4,
+      elevation: 6,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              '❓ ${widget.question}',
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
+            Text('❓ ${widget.question}',
+                style: const TextStyle(fontWeight: FontWeight.w800)),
             Row(
               children: [
                 Expanded(
@@ -403,7 +278,7 @@ class _DailyBubbleState extends State<_DailyBubble> {
                     if (_ctrl.text.trim().isEmpty) return;
                     widget.onAnswer(_ctrl.text.trim());
                   },
-                  icon: const Icon(Icons.send, color: AppColors.brandCoral),
+                  icon: const Icon(Icons.send, color: Color(0xFFE85D4C)),
                 ),
               ],
             ),
