@@ -3,6 +3,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../data/models/enums.dart';
+import '../../../features/character/domain/character_animation_state.dart';
+import '../../../features/character/providers/character_animation_provider.dart';
+import '../../../features/home/widgets/care_room_hud.dart';
 import '../../../features/home/widgets/tom_style_ui.dart';
 import '../../../shared/providers/app_providers.dart';
 
@@ -16,6 +20,15 @@ class BathroomPage extends ConsumerStatefulWidget {
 class _BathroomPageState extends ConsumerState<BathroomPage> {
   String? _moodText;
   CharacterPose _pose = CharacterPose.idle;
+  bool _washing = false;
+
+  Future<void> _showMood(String text, {CharacterPose? pose}) async {
+    if (pose != null) {
+      setState(() => _pose = pose);
+      ref.read(characterAnimationProvider.notifier).setPose(pose.animPose);
+    }
+    setState(() => _moodText = text);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,52 +41,60 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
       kind: RoomSceneKind.bathroom,
       character: character,
       pose: _pose,
-      characterAlignment: const Alignment(0, 0.25),
+      characterAlignment: const Alignment(0, 0.22),
+      characterSizeFactor: 0.66,
       onCharacterTap: () => setState(() => _pose = CharacterPose.react),
-      topBar: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        child: Row(
-          children: [
-            const TomBackButton(),
-            const SizedBox(width: 8),
-            LevelBadge(level: character.age, progress: character.yearProgress),
-            const Spacer(),
-            TomCurrencyBar(coins: character.coins, gems: character.donateCoins),
-          ],
-        ),
+      topBar: CareRoomHud(
+        age: character.age,
+        progress: character.yearProgress,
+        coins: character.coins,
+        gems: character.donateCoins,
+        needs: character.needs,
+        focusNeed: _pose == CharacterPose.sit
+            ? NeedType.toilet
+            : NeedType.cleanliness,
       ),
       overlay: Stack(
         children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onPanUpdate: (d) async {
-                await ref
-                    .read(characterProvider.notifier)
-                    .wash(d.delta.distance * 0.08);
-                setState(() {
-                  _pose = CharacterPose.happy;
-                  _moodText = 'Кехе! 🧼';
-                });
-              },
+          if (_washing)
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onPanUpdate: (d) async {
+                  await ref
+                      .read(characterProvider.notifier)
+                      .wash(d.delta.distance * 0.1);
+                  await _showMood('Кехе!', pose: CharacterPose.happy);
+                },
+                onPanEnd: (_) => setState(() => _washing = false),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: AppColors.brandSky.withValues(alpha: 0.12),
+                  ),
+                  child: const Align(
+                    alignment: Alignment(0, -0.55),
+                    child: Text(
+                      'Проведи пальцем — помий',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
           if (_moodText != null)
             Positioned(
-              top: 110,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  _moodText!,
-                  style: const TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
-                  ),
-                ).animate().fadeIn().then().fadeOut(delay: 900.ms),
-              ),
+              top: 130,
+              left: 16,
+              right: 16,
+              child: CareReactionBanner(text: _moodText!)
+                  .animate()
+                  .fadeIn()
+                  .then()
+                  .fadeOut(delay: 900.ms),
             ),
         ],
       ),
@@ -83,38 +104,40 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             TomActionButton(
-              icon: Icons.shower,
+              icon: Icons.shower_rounded,
               color: AppColors.brandSky,
-              onTap: () => setState(() {
-                _pose = CharacterPose.happy;
-                _moodText = 'Душ!';
-              }),
+              selected: _washing,
+              onTap: () async {
+                setState(() => _washing = true);
+                await ref.read(characterProvider.notifier).wash(18);
+                await _showMood('Душ!', pose: CharacterPose.happy);
+              },
             ),
             TomActionButton(
-              icon: Icons.mood,
+              icon: Icons.mood_rounded,
               color: const Color(0xFF66BB6A),
               onTap: () async {
                 await ref.read(characterProvider.notifier).brushTeeth();
-                setState(() => _moodText = 'Зубки! 😁');
+                await _showMood('Зубки!', pose: CharacterPose.happy);
               },
             ),
             TomActionButton(
-              icon: Icons.content_cut,
+              icon: Icons.content_cut_rounded,
               color: const Color(0xFFFFA726),
               onTap: () async {
                 await ref.read(characterProvider.notifier).comb();
-                setState(() => _moodText = 'Зачіска ✨');
+                await _showMood('Зачіска!', pose: CharacterPose.wave);
               },
             ),
             TomActionButton(
-              icon: Icons.wc,
+              icon: Icons.wc_rounded,
               color: const Color(0xFF8D6E63),
               onTap: () async {
                 await ref.read(characterProvider.notifier).toilet();
-                setState(() {
-                  _pose = CharacterPose.sit;
-                  _moodText = 'Фух!';
-                });
+                await _showMood('Фух!', pose: CharacterPose.sit);
+                ref
+                    .read(characterAnimationProvider.notifier)
+                    .setPose(CharacterAnimPose.sit);
               },
             ),
           ],

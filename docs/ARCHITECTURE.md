@@ -56,8 +56,8 @@ lib/
 
 1. **Structure** ✅
 2. **Character + Rive** ✅ (fallback until `.riv` art)
-3. **Home screen (Tom UX)** ← current
-4. Kitchen / Bath / Bedroom
+3. **Home screen (Tom UX)** ✅
+4. **Kitchen / Bath / Bedroom** ← current
 5. Growth XP
 6. Minigames
 7. Chat + LLM interface stub

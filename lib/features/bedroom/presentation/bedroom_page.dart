@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/models/enums.dart';
+import '../../../features/character/domain/character_animation_state.dart';
+import '../../../features/character/providers/character_animation_provider.dart';
+import '../../../features/home/widgets/care_room_hud.dart';
 import '../../../features/home/widgets/tom_style_ui.dart';
 import '../../../shared/providers/app_providers.dart';
 
@@ -28,58 +32,67 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    final sleeping = character.isSleeping;
+
     return TomRoomStage(
       kind: RoomSceneKind.bedroom,
       character: character,
-      pose: character.isSleeping ? CharacterPose.sleep : _pose,
-      characterAlignment: const Alignment(0, 0.05),
-      characterSizeFactor: 0.7,
-      topBar: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        child: Row(
-          children: [
-            const TomBackButton(),
-            const SizedBox(width: 8),
-            LevelBadge(level: character.age, progress: character.yearProgress),
-            const Spacer(),
-            TomCurrencyBar(coins: character.coins, gems: character.donateCoins),
-          ],
-        ),
+      pose: sleeping ? CharacterPose.sleep : _pose,
+      characterAlignment: const Alignment(0, 0.1),
+      characterSizeFactor: 0.66,
+      topBar: CareRoomHud(
+        age: character.age,
+        progress: character.yearProgress,
+        coins: character.coins,
+        gems: character.donateCoins,
+        needs: character.needs,
+        focusNeed: NeedType.energy,
       ),
       overlay: Stack(
         children: [
           if (_lightsOff)
             IgnorePointer(
-              child: Container(color: Colors.black.withValues(alpha: 0.45)),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 350),
+                color: Colors.black.withValues(alpha: sleeping ? 0.55 : 0.4),
+              ),
             ),
           if (_dream != null)
             Positioned(
-              top: 110,
+              top: 130,
               left: 20,
               right: 20,
-              child: Text(
-                _dream!,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                  shadows: [Shadow(blurRadius: 8, color: Colors.black54)],
-                ),
-              ).animate().fadeIn(),
+              child: CareReactionBanner(text: _dream!).animate().fadeIn(),
             ),
           if (_nightLight)
-            const Positioned(
+            Positioned(
               right: 36,
               bottom: 160,
-              child: Icon(Icons.nightlight_round,
-                  size: 40, color: Color(0xFFFFE066)),
+              child: Icon(
+                Icons.nightlight_round,
+                size: 40,
+                color: Color(0xFFFFE066).withValues(alpha: 0.95),
+              )
+                  .animate(onPlay: (c) => c.repeat(reverse: true))
+                  .scale(
+                    begin: const Offset(0.92, 0.92),
+                    end: const Offset(1.05, 1.05),
+                    duration: 1400.ms,
+                  ),
             ),
           if (_lullaby)
             const Positioned(
               left: 24,
               top: 120,
-              child: Text('🎵 ♪ ♫', style: TextStyle(fontSize: 28)),
+              child: Text(
+                '♪  ♫  ♪',
+                style: TextStyle(
+                  fontSize: 26,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  shadows: [Shadow(blurRadius: 6, color: Colors.black54)],
+                ),
+              ),
             ),
         ],
       ),
@@ -91,32 +104,37 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
             TomActionButton(
               icon: _lightsOff ? Icons.lightbulb : Icons.lightbulb_outline,
               color: const Color(0xFFFFC107),
+              selected: !_lightsOff,
               onTap: () => setState(() => _lightsOff = !_lightsOff),
             ),
             TomActionButton(
-              icon: Icons.nightlight,
+              icon: Icons.nightlight_round,
               color: const Color(0xFF7E57C2),
               selected: _nightLight,
               onTap: () => setState(() => _nightLight = !_nightLight),
             ),
             TomActionButton(
-              icon: Icons.music_note,
+              icon: Icons.music_note_rounded,
               color: const Color(0xFF26A69A),
               selected: _lullaby,
               onTap: () => setState(() => _lullaby = !_lullaby),
             ),
             TomActionButton(
-              icon: character.isSleeping ? Icons.wb_sunny : Icons.bedtime,
+              icon: sleeping ? Icons.wb_sunny_rounded : Icons.bedtime_rounded,
               color: const Color(0xFFAB47BC),
               onTap: () async {
-                if (!character.isSleeping) {
+                if (!sleeping) {
                   try {
                     await ref
                         .read(characterProvider.notifier)
                         .sleep(_lightsOff);
+                    ref
+                        .read(characterAnimationProvider.notifier)
+                        .setPose(CharacterAnimPose.sleep);
                     setState(() {
                       _pose = CharacterPose.sleep;
                       _dream = null;
+                      _lightsOff = true;
                     });
                   } catch (e) {
                     if (context.mounted) {
@@ -127,12 +145,15 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
                   }
                 } else {
                   await ref.read(characterProvider.notifier).wake();
+                  ref
+                      .read(characterAnimationProvider.notifier)
+                      .setPose(CharacterAnimPose.wave);
                   setState(() {
                     _lightsOff = false;
                     _pose = CharacterPose.wave;
                     _dream = Random().nextBool()
-                        ? '😴 Снилось, що ми стрибали на хмарах!'
-                        : 'Доброго ранку! ☀️';
+                        ? 'Снилось, що ми стрибали на хмарах!'
+                        : 'Доброго ранку!';
                   });
                 }
               },

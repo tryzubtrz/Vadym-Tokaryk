@@ -3,7 +3,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_colors.dart';
+import '../../../data/models/enums.dart';
 import '../../../data/models/food_item.dart';
+import '../../../features/character/domain/character_animation_state.dart';
+import '../../../features/character/providers/character_animation_provider.dart';
+import '../../../features/home/widgets/care_room_hud.dart';
 import '../../../features/home/widgets/tom_style_ui.dart';
 import '../../../shared/providers/app_providers.dart';
 
@@ -19,6 +23,24 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
   String? _reaction;
   CharacterPose _pose = CharacterPose.eat;
 
+  Future<void> _feed(FoodItem food) async {
+    setState(() {
+      _pose = CharacterPose.eat;
+      _reaction = null;
+    });
+    ref
+        .read(characterAnimationProvider.notifier)
+        .setPose(CharacterAnimPose.eat);
+    try {
+      await ref.read(characterProvider.notifier).feed(food);
+      if (!mounted) return;
+      setState(() => _reaction = 'Ням-ням!');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _reaction = '$e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final character = ref.watch(characterProvider);
@@ -31,55 +53,42 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
       kind: RoomSceneKind.kitchen,
       character: character,
       pose: _pose,
-      characterAlignment: const Alignment(0, 0.05),
-      characterSizeFactor: 0.72,
-      topBar: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-        child: Row(
-          children: [
-            const TomBackButton(),
-            const SizedBox(width: 8),
-            LevelBadge(level: character.age, progress: character.yearProgress),
-            const Spacer(),
-            TomCurrencyBar(coins: character.coins, gems: character.donateCoins),
-          ],
-        ),
+      characterAlignment: const Alignment(0, 0.08),
+      characterSizeFactor: 0.66,
+      topBar: CareRoomHud(
+        age: character.age,
+        progress: character.yearProgress,
+        coins: character.coins,
+        gems: character.donateCoins,
+        needs: character.needs,
+        focusNeed: NeedType.hunger,
       ),
       overlay: Stack(
         children: [
           Positioned.fill(
             child: DragTarget<FoodItem>(
-              onAcceptWithDetails: (details) async {
-                setState(() {
-                  _pose = CharacterPose.eat;
-                  _reaction = null;
-                });
-                try {
-                  await ref.read(characterProvider.notifier).feed(details.data);
-                  setState(() => _reaction = 'Ням-ням! 😋');
-                } catch (e) {
-                  setState(() => _reaction = '$e');
-                }
-              },
-              builder: (_, __, ___) => const SizedBox.expand(),
+              onAcceptWithDetails: (details) => _feed(details.data),
+              builder: (context, candidate, rejected) => IgnorePointer(
+                ignoring: candidate.isEmpty,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: candidate.isEmpty
+                        ? Colors.transparent
+                        : Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+              ),
             ),
           ),
           if (_reaction != null)
             Positioned(
-              top: 110,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Text(
-                  _reaction!,
-                  style: const TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    shadows: [Shadow(blurRadius: 10, color: Colors.black54)],
-                  ),
-                ).animate().scale().fadeOut(delay: 1100.ms),
-              ),
+              top: 130,
+              left: 16,
+              right: 16,
+              child: CareReactionBanner(text: _reaction!)
+                  .animate()
+                  .scale(duration: 220.ms)
+                  .fadeOut(delay: 1100.ms),
             ),
         ],
       ),
@@ -90,14 +99,14 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               TomActionButton(
-                icon: Icons.kitchen,
+                icon: Icons.kitchen_rounded,
                 color: AppColors.brandSky,
                 selected: _fridgeOpen,
                 onTap: () => setState(() => _fridgeOpen = !_fridgeOpen),
               ),
               const SizedBox(width: 16),
               TomActionButton(
-                icon: Icons.storefront,
+                icon: Icons.storefront_rounded,
                 color: AppColors.brandCoral,
                 onTap: () => _openShop(context),
               ),
@@ -149,7 +158,7 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
               padding: const EdgeInsets.all(16),
               children: [
                 const Text(
-                  '🛒 Магазин їжі',
+                  'Магазин їжі',
                   style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
                 ),
                 for (final item in FoodCatalog.shop) ...[
@@ -227,11 +236,12 @@ class _DraggableFood extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(food.emoji, style: const TextStyle(fontSize: 32)),
-            Text(food.nameUk,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style:
-                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            Text(
+              food.nameUk,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+            ),
             Text('×${food.quantity}', style: const TextStyle(fontSize: 11)),
           ],
         ),
