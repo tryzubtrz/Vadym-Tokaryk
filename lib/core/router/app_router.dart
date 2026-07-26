@@ -20,15 +20,19 @@ import '../../features/character/providers/app_providers.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
 
+/// Stable router — do NOT watch session/character here (that recreates GoRouter
+/// and resets onboarding UI back to step 0).
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final session = ref.watch(sessionProvider);
-  final character = ref.watch(characterProvider);
+  final refresh = _RouterRefresh(ref);
+  ref.onDispose(refresh.dispose);
 
   return GoRouter(
     navigatorKey: _rootKey,
     initialLocation: '/splash',
-    refreshListenable: _RouterRefresh(ref),
+    refreshListenable: refresh,
     redirect: (context, state) {
+      final session = ref.read(sessionProvider);
+      final character = ref.read(characterProvider);
       final path = state.matchedLocation;
       if (path == '/splash') return null;
       final done = session.onboardingComplete && character != null;
@@ -75,8 +79,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
 class _RouterRefresh extends ChangeNotifier {
   _RouterRefresh(this.ref) {
-    ref.listen(sessionProvider, (previous, next) => notifyListeners());
-    ref.listen(characterProvider, (previous, next) => notifyListeners());
+    _sessionSub = ref.listen(sessionProvider, (previous, next) {
+      notifyListeners();
+    });
+    _characterSub = ref.listen(characterProvider, (previous, next) {
+      notifyListeners();
+    });
   }
+
   final Ref ref;
+  late final ProviderSubscription<dynamic> _sessionSub;
+  late final ProviderSubscription<dynamic> _characterSub;
+
+  @override
+  void dispose() {
+    _sessionSub.close();
+    _characterSub.close();
+    super.dispose();
+  }
 }

@@ -59,44 +59,54 @@ class _OnboardingFlowState extends ConsumerState<OnboardingFlow> {
 
   Future<void> _next() async {
     setState(() => _error = null);
-    switch (_step) {
-      case 0:
-        await ref.read(sessionProvider.notifier).setLanguage(_lang);
-        setState(() => _step = 1);
-      case 1:
-        if (!_email.text.contains('@') || _pass.text.length < 4) {
-          setState(() => _error = 'Вкажи email і пароль (мін. 4 символи)');
-          return;
-        }
-        await ref.read(sessionProvider.notifier).setEmail(_email.text);
-        setState(() => _step = 2);
-      case 2:
-        final age = int.tryParse(_age.text.trim());
-        if (age == null || age < AppConstants.minUserAge) {
-          setState(
-            () => _error = 'Вік користувача від ${AppConstants.minUserAge}+',
+    if (_step == 0) {
+      await ref.read(sessionProvider.notifier).setLanguage(_lang);
+      if (!mounted) return;
+      setState(() => _step = 1);
+      return;
+    }
+    if (_step == 1) {
+      if (!_email.text.contains('@') || _pass.text.length < 4) {
+        setState(() => _error = 'Вкажи email і пароль (мін. 4 символи)');
+        return;
+      }
+      await ref.read(sessionProvider.notifier).setEmail(_email.text);
+      if (!mounted) return;
+      setState(() => _step = 2);
+      return;
+    }
+    if (_step == 2) {
+      final age = int.tryParse(_age.text.trim());
+      if (age == null || age < AppConstants.minUserAge) {
+        setState(
+          () => _error = 'Вік користувача від ${AppConstants.minUserAge}+',
+        );
+        return;
+      }
+      await ref.read(sessionProvider.notifier).setRealAge(age);
+      if (!mounted) return;
+      setState(() => _step = 3);
+      return;
+    }
+    if (_step == 3) {
+      if (_type == null) {
+        setState(() => _error = 'Обери персонажа');
+        return;
+      }
+      setState(() => _step = 4);
+      return;
+    }
+    if (_step == 4) {
+      if (_name.text.trim().length < 2) {
+        setState(() => _error = 'Введи імʼя (мін. 2 літери)');
+        return;
+      }
+      await ref.read(characterProvider.notifier).create(
+            name: _name.text,
+            type: _type!,
           );
-          return;
-        }
-        await ref.read(sessionProvider.notifier).setRealAge(age);
-        setState(() => _step = 3);
-      case 3:
-        if (_type == null) {
-          setState(() => _error = 'Обери персонажа');
-          return;
-        }
-        setState(() => _step = 4);
-      case 4:
-        if (_name.text.trim().length < 2) {
-          setState(() => _error = 'Введи імʼя (мін. 2 літери)');
-          return;
-        }
-        await ref.read(characterProvider.notifier).create(
-              name: _name.text,
-              type: _type!,
-            );
-        await ref.read(sessionProvider.notifier).completeOnboarding();
-        if (mounted) context.go('/home');
+      await ref.read(sessionProvider.notifier).completeOnboarding();
+      if (mounted) context.go('/home');
     }
   }
 
