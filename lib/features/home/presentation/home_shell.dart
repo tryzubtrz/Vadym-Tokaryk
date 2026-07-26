@@ -15,6 +15,7 @@ class HomeShell extends ConsumerStatefulWidget {
 
 class _HomeShellState extends ConsumerState<HomeShell> {
   int _action = 1;
+  CharacterPose _pose = CharacterPose.idle;
 
   @override
   void initState() {
@@ -39,11 +40,19 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     return TomRoomStage(
       kind: RoomSceneKind.living,
       character: character,
-      pose: CharacterPose.idle,
+      pose: _pose,
       onCharacterTap: () {
+        setState(() => _pose = CharacterPose.react);
         ref.read(characterProvider.notifier).interact(InteractionGesture.tap);
-        setState(() => _action = 1);
       },
+      onStroke: () {
+        setState(() => _pose = CharacterPose.happy);
+        ref.read(characterProvider.notifier).interact(InteractionGesture.stroke);
+      },
+      onPoke: () =>
+          ref.read(characterProvider.notifier).interact(InteractionGesture.pokeForehead),
+      onShake: () =>
+          ref.read(characterProvider.notifier).interact(InteractionGesture.shake),
       topBar: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Column(
@@ -63,7 +72,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   gems: character.donateCoins,
                 ),
                 const SizedBox(width: 6),
-                _hudIcon(Icons.settings_rounded, () => context.push('/settings')),
+                _hudIcon(
+                  Icons.settings_rounded,
+                  () => context.push('/settings'),
+                ),
               ],
             ),
             if (downloadLabel != null) ...[
@@ -77,8 +89,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 ),
                 child: Column(
                   children: [
-                    Text(downloadLabel,
-                        style: const TextStyle(color: Colors.white, fontSize: 12)),
+                    Text(
+                      downloadLabel,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
                     LinearProgressIndicator(value: downloadProgress),
                   ],
                 ),
@@ -101,20 +115,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             icon: Icons.checkroom,
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Гардероб / скіни — скоро')),
+                const SnackBar(content: Text('Гардероб — скоро')),
               );
             },
           ),
-          if (character.photoRoomUnlocked)
-            TomSideFab(
-              icon: Icons.photo_camera,
-              onTap: () => context.push('/photo'),
-            ),
-          if (character.codeRoomUnlocked)
-            TomSideFab(
-              icon: Icons.code,
-              onTap: () => context.push('/code'),
-            ),
         ],
       ),
       overlay: growth.dailyQuestionAsked &&
@@ -158,7 +162,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               color: const Color(0xFF3DDC84),
               selected: _action == 1,
               onTap: () {
-                setState(() => _action = 1);
+                setState(() {
+                  _action = 1;
+                  _pose = CharacterPose.happy;
+                });
                 context.push('/chat');
               },
             ),
@@ -167,7 +174,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               color: const Color(0xFFE53935),
               selected: _action == 2,
               onTap: () {
-                setState(() => _action = 2);
+                setState(() {
+                  _action = 2;
+                  _pose = CharacterPose.eat;
+                });
                 context.push('/kitchen');
               },
             ),
@@ -185,7 +195,10 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               color: const Color(0xFFAB47BC),
               selected: _action == 4,
               onTap: () {
-                setState(() => _action = 4);
+                setState(() {
+                  _action = 4;
+                  _pose = CharacterPose.sleep;
+                });
                 context.push('/bedroom');
               },
             ),
@@ -259,8 +272,10 @@ class _DailyBubbleState extends State<_DailyBubble> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('❓ ${widget.question}',
-                style: const TextStyle(fontWeight: FontWeight.w800)),
+            Text(
+              '❓ ${widget.question}',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
             Row(
               children: [
                 Expanded(

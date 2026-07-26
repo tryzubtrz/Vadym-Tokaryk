@@ -15,6 +15,7 @@ class BathroomPage extends ConsumerStatefulWidget {
 
 class _BathroomPageState extends ConsumerState<BathroomPage> {
   String? _moodText;
+  CharacterPose _pose = CharacterPose.idle;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +27,9 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
     return TomRoomStage(
       kind: RoomSceneKind.bathroom,
       character: character,
+      pose: _pose,
+      characterAlignment: const Alignment(0, 0.25),
+      onCharacterTap: () => setState(() => _pose = CharacterPose.react),
       topBar: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Row(
@@ -42,11 +46,15 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
         children: [
           Positioned.fill(
             child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
               onPanUpdate: (d) async {
                 await ref
                     .read(characterProvider.notifier)
                     .wash(d.delta.distance * 0.08);
-                setState(() => _moodText = 'Кехе! 🧼');
+                setState(() {
+                  _pose = CharacterPose.happy;
+                  _moodText = 'Кехе! 🧼';
+                });
               },
             ),
           ),
@@ -77,7 +85,10 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
             TomActionButton(
               icon: Icons.shower,
               color: AppColors.brandSky,
-              onTap: () => setState(() => _moodText = 'Душ!'),
+              onTap: () => setState(() {
+                _pose = CharacterPose.happy;
+                _moodText = 'Душ!';
+              }),
             ),
             TomActionButton(
               icon: Icons.mood,
@@ -100,7 +111,10 @@ class _BathroomPageState extends ConsumerState<BathroomPage> {
               color: const Color(0xFF8D6E63),
               onTap: () async {
                 await ref.read(characterProvider.notifier).toilet();
-                setState(() => _moodText = 'Фух!');
+                setState(() {
+                  _pose = CharacterPose.sit;
+                  _moodText = 'Фух!';
+                });
               },
             ),
           ],

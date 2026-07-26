@@ -19,6 +19,7 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
   bool _nightLight = true;
   bool _lullaby = false;
   String? _dream;
+  CharacterPose _pose = CharacterPose.happy;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +31,9 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
     return TomRoomStage(
       kind: RoomSceneKind.bedroom,
       character: character,
-      pose: CharacterPose.sleep,
+      pose: character.isSleeping ? CharacterPose.sleep : _pose,
+      characterAlignment: const Alignment(0, 0.05),
+      characterSizeFactor: 0.7,
       topBar: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Row(
@@ -69,7 +72,8 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
             const Positioned(
               right: 36,
               bottom: 160,
-              child: Icon(Icons.nightlight_round, size: 40, color: Color(0xFFFFE066)),
+              child: Icon(Icons.nightlight_round,
+                  size: 40, color: Color(0xFFFFE066)),
             ),
           if (_lullaby)
             const Positioned(
@@ -110,7 +114,10 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
                     await ref
                         .read(characterProvider.notifier)
                         .sleep(_lightsOff);
-                    setState(() => _dream = null);
+                    setState(() {
+                      _pose = CharacterPose.sleep;
+                      _dream = null;
+                    });
                   } catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
@@ -122,6 +129,7 @@ class _BedroomPageState extends ConsumerState<BedroomPage> {
                   await ref.read(characterProvider.notifier).wake();
                   setState(() {
                     _lightsOff = false;
+                    _pose = CharacterPose.wave;
                     _dream = Random().nextBool()
                         ? '😴 Снилось, що ми стрибали на хмарах!'
                         : 'Доброго ранку! ☀️';

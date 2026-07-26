@@ -5,7 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/models/character_model.dart';
 import '../../../data/models/enums.dart';
 
-enum CharacterPose { idle, happy, eat, sleep, sit, wave }
+enum CharacterPose { idle, happy, eat, sleep, sit, wave, react }
 
 enum RoomSceneKind {
   living,
@@ -17,62 +17,81 @@ enum RoomSceneKind {
   closet,
 }
 
-/// Full-bleed 3D rendered room scene (Talking Tom quality assets).
+String roomBackgroundAsset(RoomSceneKind kind) => switch (kind) {
+      RoomSceneKind.kitchen => 'assets/images/rooms/bg_kitchen_empty.png',
+      RoomSceneKind.bathroom => 'assets/images/rooms/bg_bath_empty.png',
+      RoomSceneKind.bedroom => 'assets/images/rooms/bg_bed_empty.png',
+      _ => 'assets/images/rooms/bg_living_empty.png',
+    };
+
+/// Talking Tom format:
+/// 1) empty room background
+/// 2) living character layered on top
+/// 3) HUD / circular actions as overlay
 class TomRoomStage extends StatelessWidget {
   const TomRoomStage({
     super.key,
     required this.kind,
-    this.character,
+    required this.character,
     this.pose = CharacterPose.idle,
     this.onCharacterTap,
+    this.onStroke,
+    this.onPoke,
+    this.onShake,
     this.topBar,
     this.bottomBar,
     this.sideBar,
     this.overlay,
+    this.characterAlignment = const Alignment(0, 0.35),
+    this.characterSizeFactor = 0.78,
   });
 
   final RoomSceneKind kind;
-  final CharacterModel? character;
+  final CharacterModel character;
   final CharacterPose pose;
   final VoidCallback? onCharacterTap;
+  final VoidCallback? onStroke;
+  final VoidCallback? onPoke;
+  final VoidCallback? onShake;
   final Widget? topBar;
   final Widget? bottomBar;
   final Widget? sideBar;
   final Widget? overlay;
-
-  String get _roomAsset => switch (kind) {
-        RoomSceneKind.kitchen => 'assets/images/rooms/room_kitchen_masya.png',
-        RoomSceneKind.bathroom => 'assets/images/rooms/room_bath_masya.png',
-        RoomSceneKind.bedroom => 'assets/images/rooms/room_bed_masya.png',
-        _ => 'assets/images/rooms/room_living_masya.png',
-      };
+  final Alignment characterAlignment;
+  final double characterSizeFactor;
 
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // 3D room plate with subtle living motion
-          GestureDetector(
-            onTap: onCharacterTap,
-            child: Image.asset(
-              _roomAsset,
-              fit: BoxFit.cover,
-              alignment: Alignment.center,
-              filterQuality: FilterQuality.high,
-            )
-                .animate(onPlay: (c) => c.repeat(reverse: true))
-                .scale(
-                  begin: const Offset(1.0, 1.0),
-                  end: const Offset(1.025, 1.025),
-                  duration: 3200.ms,
-                  curve: Curves.easeInOut,
-                ),
+          // 1. Room only
+          Image.asset(
+            roomBackgroundAsset(kind),
+            fit: BoxFit.cover,
+            alignment: Alignment.center,
+            filterQuality: FilterQuality.high,
           ),
 
-          // Soft vignette for UI readability
+          // 2. Living character (not baked into room)
+          Align(
+            alignment: characterAlignment,
+            child: CharacterAnimator(
+              character: character,
+              size: w * characterSizeFactor,
+              pose: pose,
+              onTap: onCharacterTap,
+              onStroke: onStroke,
+              onPoke: onPoke,
+              onShake: onShake,
+            ),
+          ),
+
+          // Readability vignette
           IgnorePointer(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -80,12 +99,12 @@ class TomRoomStage extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.25),
+                    Colors.black.withValues(alpha: 0.22),
                     Colors.transparent,
                     Colors.transparent,
-                    Colors.black.withValues(alpha: 0.35),
+                    Colors.black.withValues(alpha: 0.28),
                   ],
-                  stops: const [0, 0.18, 0.72, 1],
+                  stops: const [0, 0.16, 0.75, 1],
                 ),
               ),
             ),
@@ -121,7 +140,7 @@ class TomRoomStage extends StatelessWidget {
   }
 }
 
-/// Floating 3D character sprite (cutout) for chat / games overlays.
+/// Cutout 3D character with continuous idle motion + pose swaps.
 class CharacterAnimator extends StatefulWidget {
   const CharacterAnimator({
     super.key,
@@ -151,8 +170,11 @@ class CharacterAnimator extends StatefulWidget {
 }
 
 class _CharacterAnimatorState extends State<CharacterAnimator>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _breathe;
+  late final AnimationController _sway;
+  CharacterPose _flashPose = CharacterPose.idle;
+  bool _flashing = false;
   Offset _drag = Offset.zero;
 
   @override
@@ -160,61 +182,96 @@ class _CharacterAnimatorState extends State<CharacterAnimator>
     super.initState();
     _breathe = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2200),
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _sway = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2600),
     )..repeat(reverse: true);
   }
 
   @override
   void dispose() {
     _breathe.dispose();
+    _sway.dispose();
     super.dispose();
   }
 
-  String _assetFor() {
-    final isGirl = widget.character.type == CharacterType.masya;
-    if (!isGirl) {
-      return 'assets/images/character/syryk_idle_cut.png';
-    }
-    return switch (widget.pose) {
-      CharacterPose.happy || CharacterPose.wave =>
-        'assets/images/character/masya_happy_cut.png',
+  CharacterPose get _effectivePose {
+    if (_flashing) return _flashPose;
+    if (widget.character.isSleeping) return CharacterPose.sleep;
+    return widget.pose;
+  }
+
+  String _assetFor(CharacterPose pose) {
+    final girl = widget.character.type == CharacterType.masya;
+    if (!girl) return 'assets/images/character/syryk_idle_cut.png';
+    return switch (pose) {
+      CharacterPose.happy ||
+      CharacterPose.wave ||
+      CharacterPose.react =>
+        'assets/images/character/masya_react_cut.png',
       CharacterPose.eat => 'assets/images/character/masya_eat_cut.png',
       CharacterPose.sleep => 'assets/images/character/masya_sleep_cut.png',
-      _ => 'assets/images/character/masya_idle_cut.png',
+      CharacterPose.sit => 'assets/images/character/masya_stand_cut.png',
+      _ => 'assets/images/character/masya_stand_cut.png',
     };
+  }
+
+  Future<void> _flash(CharacterPose pose) async {
+    setState(() {
+      _flashing = true;
+      _flashPose = pose;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    if (mounted) setState(() => _flashing = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final pose = _effectivePose;
+    final asset = _assetFor(pose);
+
     return GestureDetector(
-      onTap: widget.onTap,
-      onLongPress: widget.onStroke,
-      onDoubleTap: widget.onPoke,
+      onTap: () {
+        widget.onTap?.call();
+        _flash(CharacterPose.react);
+      },
+      onLongPress: () {
+        widget.onStroke?.call();
+        _flash(CharacterPose.happy);
+      },
+      onDoubleTap: () {
+        widget.onPoke?.call();
+        _flash(CharacterPose.react);
+      },
       onPanUpdate: (d) {
         _drag += d.delta;
-        if (_drag.distance > 40) {
+        if (_drag.distance > 42) {
           widget.onShake?.call();
           _drag = Offset.zero;
+          _flash(CharacterPose.react);
         }
       },
       child: AnimatedBuilder(
-        animation: _breathe,
+        animation: Listenable.merge([_breathe, _sway]),
         builder: (_, __) {
-          final s = 1 + _breathe.value * 0.03;
+          final breathe = 1 + _breathe.value * 0.035;
+          final bob = (_breathe.value - 0.5) * 10;
+          final sway = (_sway.value - 0.5) * 6;
           return Transform.translate(
-            offset: Offset(0, (0.5 - _breathe.value) * 8),
+            offset: Offset(sway, bob),
             child: Transform.scale(
-              scale: s,
-              child: Image.asset(
-                _assetFor(),
-                width: widget.size,
-                height: widget.size,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
-                errorBuilder: (_, __, ___) => SizedBox(
+              scale: breathe,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: Image.asset(
+                  asset,
+                  key: ValueKey(asset),
                   width: widget.size,
-                  height: widget.size,
-                  child: const Icon(Icons.pets, size: 80),
+                  height: widget.size * 1.05,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
                 ),
               ),
             ),
@@ -249,7 +306,7 @@ class TomActionButton extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
+            duration: const Duration(milliseconds: 160),
             width: selected ? 60 : 54,
             height: selected ? 60 : 54,
             decoration: BoxDecoration(
@@ -294,7 +351,6 @@ class TomActionButton extends StatelessWidget {
 
 class LevelBadge extends StatelessWidget {
   const LevelBadge({super.key, required this.level, this.progress = 0});
-
   final int level;
   final double progress;
 
@@ -345,12 +401,7 @@ class LevelBadge extends StatelessWidget {
 }
 
 class TomCurrencyBar extends StatelessWidget {
-  const TomCurrencyBar({
-    super.key,
-    required this.coins,
-    required this.gems,
-  });
-
+  const TomCurrencyBar({super.key, required this.coins, required this.gems});
   final int coins;
   final int gems;
 
@@ -415,7 +466,6 @@ class TomBackButton extends StatelessWidget {
 
 class TomSideFab extends StatelessWidget {
   const TomSideFab({super.key, required this.icon, required this.onTap});
-
   final IconData icon;
   final VoidCallback onTap;
 
@@ -440,7 +490,6 @@ class TomSideFab extends StatelessWidget {
   }
 }
 
-/// Kept for older imports that referenced painted backgrounds.
 class RoomSceneBackground extends StatelessWidget {
   const RoomSceneBackground({super.key, required this.kind, this.child});
   final RoomSceneKind kind;
@@ -448,16 +497,10 @@ class RoomSceneBackground extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final asset = switch (kind) {
-      RoomSceneKind.kitchen => 'assets/images/rooms/room_kitchen_masya.png',
-      RoomSceneKind.bathroom => 'assets/images/rooms/room_bath_masya.png',
-      RoomSceneKind.bedroom => 'assets/images/rooms/room_bed_masya.png',
-      _ => 'assets/images/rooms/room_living_masya.png',
-    };
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.asset(asset, fit: BoxFit.cover),
+        Image.asset(roomBackgroundAsset(kind), fit: BoxFit.cover),
         if (child != null) child!,
       ],
     );

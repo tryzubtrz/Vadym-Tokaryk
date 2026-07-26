@@ -17,6 +17,7 @@ class KitchenPage extends ConsumerStatefulWidget {
 class _KitchenPageState extends ConsumerState<KitchenPage> {
   bool _fridgeOpen = true;
   String? _reaction;
+  CharacterPose _pose = CharacterPose.eat;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +30,9 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
     return TomRoomStage(
       kind: RoomSceneKind.kitchen,
       character: character,
-      pose: CharacterPose.eat,
+      pose: _pose,
+      characterAlignment: const Alignment(0, 0.05),
+      characterSizeFactor: 0.72,
       topBar: Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
         child: Row(
@@ -44,11 +47,13 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
       ),
       overlay: Stack(
         children: [
-          // Drop food onto the 3D scene character area
           Positioned.fill(
             child: DragTarget<FoodItem>(
               onAcceptWithDetails: (details) async {
-                setState(() => _reaction = null);
+                setState(() {
+                  _pose = CharacterPose.eat;
+                  _reaction = null;
+                });
                 try {
                   await ref.read(characterProvider.notifier).feed(details.data);
                   setState(() => _reaction = 'Ням-ням! 😋');
@@ -56,7 +61,7 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
                   setState(() => _reaction = '$e');
                 }
               },
-              builder: (context, candidate, _) => const SizedBox.expand(),
+              builder: (_, __, ___) => const SizedBox.expand(),
             ),
           ),
           if (_reaction != null)
@@ -107,7 +112,6 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white, width: 3),
                     ),
                     child: fridge.isEmpty
                         ? const Center(child: Text('Порожньо — купи їжу'))
@@ -115,7 +119,8 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.all(10),
                             children: [
-                              for (final food in fridge) _DraggableFood(food: food),
+                              for (final food in fridge)
+                                _DraggableFood(food: food),
                             ],
                           ),
                   )
@@ -134,66 +139,61 @@ class _KitchenPageState extends ConsumerState<KitchenPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) {
-        return Consumer(
-          builder: (context, ref, _) {
-            return DraggableScrollableSheet(
-              expand: false,
-              initialChildSize: 0.65,
-              builder: (_, controller) {
-                return ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    const Text(
-                      '🛒 Магазин їжі',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                    ),
-                    for (final item in FoodCatalog.shop) ...[
-                      Text('${item.emoji} ${item.nameUk}',
-                          style: const TextStyle(fontWeight: FontWeight.w800)),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          for (final pack in FoodCatalog.packSizes)
-                            ActionChip(
-                              label: Text(
-                                '×$pack (${FoodCatalog.packPrice(item, pack)})',
-                              ),
-                              onPressed: () async {
-                                try {
-                                  await ref
-                                      .read(characterProvider.notifier)
-                                      .buyFood(item, pack);
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          'Куплено ${item.nameUk} ×$pack',
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('$e')),
-                                    );
-                                  }
-                                }
-                              },
-                            ),
-                        ],
-                      ),
-                      const Divider(),
+      builder: (_) => Consumer(
+        builder: (context, ref, _) {
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.65,
+            builder: (_, controller) => ListView(
+              controller: controller,
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Text(
+                  '🛒 Магазин їжі',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                ),
+                for (final item in FoodCatalog.shop) ...[
+                  Text('${item.emoji} ${item.nameUk}',
+                      style: const TextStyle(fontWeight: FontWeight.w800)),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      for (final pack in FoodCatalog.packSizes)
+                        ActionChip(
+                          label: Text(
+                            '×$pack (${FoodCatalog.packPrice(item, pack)})',
+                          ),
+                          onPressed: () async {
+                            try {
+                              await ref
+                                  .read(characterProvider.notifier)
+                                  .buyFood(item, pack);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content:
+                                        Text('Куплено ${item.nameUk} ×$pack'),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('$e')),
+                                );
+                              }
+                            }
+                          },
+                        ),
                     ],
-                  ],
-                );
-              },
-            );
-          },
-        );
-      },
+                  ),
+                  const Divider(),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -215,26 +215,25 @@ class _DraggableFood extends StatelessWidget {
     );
   }
 
-  Widget _chip() {
-    return Container(
-      width: 86,
-      margin: const EdgeInsets.all(6),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFF8F0),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(food.emoji, style: const TextStyle(fontSize: 32)),
-          Text(food.nameUk,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-          Text('×${food.quantity}', style: const TextStyle(fontSize: 11)),
-        ],
-      ),
-    );
-  }
+  Widget _chip() => Container(
+        width: 86,
+        margin: const EdgeInsets.all(6),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF8F0),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(food.emoji, style: const TextStyle(fontSize: 32)),
+            Text(food.nameUk,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            Text('×${food.quantity}', style: const TextStyle(fontSize: 11)),
+          ],
+        ),
+      );
 }
