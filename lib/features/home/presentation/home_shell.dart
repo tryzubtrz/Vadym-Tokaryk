@@ -113,11 +113,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           ),
           TomSideFab(
             icon: Icons.checkroom,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Гардероб — скоро')),
-              );
-            },
+            onTap: () => context.push('/wardrobe'),
           ),
         ],
       ),

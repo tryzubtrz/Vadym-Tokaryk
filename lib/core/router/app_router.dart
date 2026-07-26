@@ -26,6 +26,7 @@ import '../../features/settings/presentation/feedback_page.dart';
 import '../../features/settings/presentation/models_page.dart';
 import '../../features/settings/presentation/storage_page.dart';
 import '../../features/economy/presentation/economy_page.dart';
+import '../../features/wardrobe/presentation/wardrobe_page.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
 
@@ -92,6 +93,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/storage', builder: (_, __) => const StoragePage()),
       GoRoute(path: '/feedback', builder: (_, __) => const FeedbackPage()),
       GoRoute(path: '/economy', builder: (_, __) => const EconomyPage()),
+      GoRoute(path: '/wardrobe', builder: (_, __) => const WardrobePage()),
     ],
   );
 });

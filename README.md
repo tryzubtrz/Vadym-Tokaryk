@@ -1,14 +1,27 @@
 # MyMasyaAI
 
-Кросплатформенний Flutter-компаньйон з вирощуванням персонажа (Сирик / Мася) від **4 до 60+** років, локальним інтелектом, двома валютами, кімнатами догляду, міні-іграми, друзями, фото та кодом.
+Кросплатформенний Flutter-компаньйон (UX орієнтир: My Talking Tom / Tom 2),
+власний ІР — **Сирик** / **Мася**, ріст 4→60+, локальний ШІ, дві валюти.
+
+## Статус розробки
+
+| Крок | Опис | Статус |
+|------|------|--------|
+| 1 | Структура проекту, тема, роутер | ✅ |
+| 2 | Персонаж + Rive + вікові стадії | ⏳ далі |
+| 3 | Головний екран (Tom UX) | ⏳ |
+| 4 | Кухня / Ванна / Спальня | ⏳ |
+| 5 | Система росту | ⏳ |
+| 6 | Міні-ігри | ⏳ |
+| 7 | Чат + LLM порт | ⏳ |
+| 8 | Фото / Код | ⏳ |
+| 9 | Друзі, пітомець, економіка, офлайн… | ⏳ |
+
+Деталі: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/STEP1_STRUCTURE.md`](docs/STEP1_STRUCTURE.md).
 
 ## Стек
 
-- Flutter + Riverpod
-- GoRouter
-- Hive + Flutter Secure Storage
-- CustomPainter-анімація персонажа (Rive-ready слоти в `assets/rive/`)
-- Offline-first базовий догляд
+Flutter · Riverpod · go_router · Hive · Secure Storage · Rive · freezed
 
 ## Запуск
 
@@ -17,41 +30,4 @@ flutter pub get
 flutter run
 ```
 
-## Архітектура
-
-```
-lib/
-  core/           # константи, тема, роутер, мови
-  data/           # моделі, Hive, secure store
-  domain/         # сервіси (auth, character, growth, AI, chat, friends…)
-  features/       # onboarding, home, rooms, games, settings…
-  shared/         # провайдери та віджети
-```
-
-## Ключові системи
-
-| Система | Де |
-|--------|----|
-| Онбординг (мова, auth, вік, Сирик/Мася) | `features/onboarding`, `features/auth` |
-| Потреби + тіло + вікові стадії | `domain/services/character_service.dart` |
-| Ріст XP / моделі ШІ (кеш ≤2) | `growth_service.dart`, `ai_model_service.dart` |
-| Кухня drag&drop / пакети їжі | `features/kitchen` |
-| Ванна / спальня | `features/bathroom`, `features/bedroom` |
-| 9 міні-ігор | `features/games/presentation/games/` |
-| Чат + життєві підказки | `features/chat` |
-| Фото (з 10) / Код (з 20) | `features/photo`, `features/code` |
-| Друзі / сховище / економіка | `features/friends`, `settings`, `economy` |
-
-## Баланс росту
-
-Крива XP у `lib/core/constants/growth_balance.dart`:
-
-- 4→5 ≈ 2–3 дні активної гри
-- з кожним роком складність росте (~1.28× + буст після 20)
-- очки за ранок/день/вечір, питання дня (1 год), ігри, чат
-
-## Примітки
-
-- Apple/Google login і завантаження LLM — клієнтські потоки зі stub/симуляцією до підключення ключів і сервера.
-- Донат-кнопка навмисно неактивна; розвиток персонажа безкоштовний.
-- Захист від переведення часу: `TimeGuardService`.
+Демо без реєстрації: при старті створюється гостьовий профіль (див. `DemoBootstrap`).
